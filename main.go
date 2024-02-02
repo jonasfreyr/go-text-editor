@@ -1,67 +1,151 @@
 package main
 
 import (
-	"github.com/rthornton128/goncurses"
+	"flag"
 	"log"
+	"os"
+	"strings"
+
+	gc "github.com/rthornton128/goncurses"
 )
 
-func main() {
-	// Initialize goncurses. It's essential End() is called to ensure the
-	// terminal isn't altered after the program ends
-	stdscr, err := goncurses.Init()
+type Editor struct {
+	text   []string
+	stdscr *gc.Window
+}
+
+func (e *Editor) Init() {
+	var err error
+	e.stdscr, err = gc.Init()
 
 	if err != nil {
 		log.Fatal("init", err)
 	}
-	defer goncurses.End()
 
-	// stdscr.Print("Hello, World!")
-	// stdscr.Move(1, 0)
-	goncurses.Echo(false)
+	gc.Echo(false)
+	e.stdscr.Keypad(true)
 
-	maxY, _ := stdscr.MaxYX()
+	maxY, _ := e.stdscr.MaxYX()
 
-	currentText := make([]string, maxY)
+	e.text = make([]string, maxY)
+}
+func (e *Editor) End() {
+	gc.End()
+}
+func (e *Editor) Load(filePath string) error {
+	lines, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
 
+	e.text = make([]string, 1)
+	lineNr := 0
+	for _, r := range lines {
+		if r == 0x0D {
+			continue
+		}
+		chr := string(r)
+		e.text[lineNr] += chr
+
+		if chr == "\n" {
+			e.text = append(e.text, "")
+			lineNr++
+		}
+	}
+
+	log.Println(len(e.text))
+
+	for _, line := range e.text {
+		e.stdscr.Print(line)
+		log.Print(line)
+	}
+
+	e.stdscr.Refresh()
+
+	return nil
+}
+func (e *Editor) Run() error {
 	for {
-		key := stdscr.GetChar()
-		y, x := stdscr.CursorYX()
+		key := e.stdscr.GetChar()
+		y, x := e.stdscr.CursorYX()
 
 		switch key {
-		case goncurses.KEY_ESC:
-			return
-		case goncurses.KEY_ENTER, goncurses.KEY_RETURN:
-			currentText[y] += "\n"
-			stdscr.Println("")
-		case goncurses.KEY_TAB:
+		case gc.KEY_ESC:
+			return nil
+		case gc.KEY_ENTER, gc.KEY_RETURN:
+			e.text[y] += "\n"
+			e.stdscr.Println("")
 
-		case 127: // Backspace?
+			if y+1 >= len(e.text) {
+				e.text = append(e.text, "")
+			}
+		case gc.KEY_TAB:
+		case gc.KEY_BACKSPACE:
 			if x == 0 {
 				if y == 0 {
 					continue
 				}
 				y -= 1
-				x = len(currentText[y]) - 1
+				x = len(e.text[y]) - 1
 			} else {
 				x--
 			}
-			stdscr.Move(y, x)
-			err := stdscr.DelChar()
-			currentText[y] = currentText[y][:x] + currentText[y][x+1:]
+			e.stdscr.Move(y, x)
+			err := e.stdscr.DelChar()
+			e.text[y] = e.text[y][:x] + e.text[y][x+1:]
 			if err != nil {
-				panic(err)
+				return err
 			}
-
 		default:
-			chr := goncurses.KeyString(key)
+			chr := gc.KeyString(key)
 			if len(chr) > 1 {
 				continue
 			}
 
-			stdscr.AddChar(goncurses.Char(key))
-			currentText[y] += chr
+			e.stdscr.AddChar(gc.Char(key))
+			e.text[y] += chr
 		}
 
-		stdscr.Refresh()
+		e.stdscr.Refresh()
+	}
+}
+func (e *Editor) Save(filepath string) error {
+	data := []byte(strings.Join(e.text, ""))
+	err := os.WriteFile(filepath, data, 0666)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func main() {
+	path := flag.String("filepath", "", "Path to the file you want to load")
+
+	flag.Parse()
+
+	e := &Editor{}
+	e.Init()
+	defer e.End()
+
+	f, _ := os.OpenFile("info.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	log.SetOutput(f)
+	defer f.Close()
+
+	if *path != "" {
+		err := e.Load(*path)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	err := e.Run()
+	if err != nil {
+		panic(err)
+	}
+	if *path != "" {
+		err := e.Save(*path)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
