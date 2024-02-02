@@ -14,6 +14,23 @@ type Editor struct {
 	stdscr *gc.Window
 }
 
+func (e *Editor) draw() {
+	e.stdscr.Clear()
+
+	y, x := e.stdscr.CursorYX()
+
+	log.Println(x, y)
+
+	e.stdscr.Move(0, 0)
+
+	for _, line := range e.text {
+		e.stdscr.Print(line)
+	}
+	e.stdscr.Move(y, x)
+
+	e.stdscr.Refresh()
+}
+
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
@@ -53,14 +70,7 @@ func (e *Editor) Load(filePath string) error {
 		}
 	}
 
-	log.Println(len(e.text))
-
-	for _, line := range e.text {
-		e.stdscr.Print(line)
-		log.Print(line)
-	}
-
-	e.stdscr.Refresh()
+	e.draw()
 
 	return nil
 }
@@ -72,13 +82,50 @@ func (e *Editor) Run() error {
 		switch key {
 		case gc.KEY_ESC:
 			return nil
+		case gc.KEY_DOWN:
+			if y >= len(e.text)-1 {
+				continue
+			}
+
+			if x > len(e.text[y+1])-1 {
+				x = len(e.text[y+1]) - 1
+			}
+
+			e.stdscr.Move(y+1, x)
+
+		case gc.KEY_UP:
+			if y <= 0 {
+				continue
+			}
+
+			if x > len(e.text[y-1])-1 {
+				x = len(e.text[y-1]) - 1
+			}
+
+			e.stdscr.Move(y-1, x)
+		case gc.KEY_LEFT:
+			if x <= 0 {
+				continue
+			}
+
+			e.stdscr.Move(y, x-1)
+
+		case gc.KEY_RIGHT:
+			if x >= len(e.text[y])-1 {
+				continue
+			}
+
+			e.stdscr.Move(y, x+1)
+
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			e.text[y] += "\n"
-			e.stdscr.Println("")
+			e.text[y] = e.text[y][:x] + "\n" + e.text[y][x:]
 
 			if y+1 >= len(e.text) {
 				e.text = append(e.text, "")
 			}
+
+			e.stdscr.Move(y+1, x)
+
 		case gc.KEY_TAB:
 		case gc.KEY_BACKSPACE:
 			if x == 0 {
@@ -102,11 +149,9 @@ func (e *Editor) Run() error {
 				continue
 			}
 
-			e.stdscr.AddChar(gc.Char(key))
-			e.text[y] += chr
+			e.text[y] = e.text[y][:x] + chr + e.text[y][x:]
 		}
-
-		e.stdscr.Refresh()
+		e.draw()
 	}
 }
 func (e *Editor) Save(filepath string) error {
