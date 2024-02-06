@@ -2,30 +2,30 @@ package main
 
 import (
 	"flag"
+	gc "github.com/rthornton128/goncurses"
 	"log"
 	"os"
 	"strings"
-
-	gc "github.com/rthornton128/goncurses"
 )
 
 type Editor struct {
 	text   []string
 	stdscr *gc.Window
+
+	maxX, maxY int
 }
 
-func (e *Editor) draw() {
+func (e *Editor) draw(y, x int) {
 	e.stdscr.Clear()
 
-	y, x := e.stdscr.CursorYX()
+	for i, line := range e.text {
+		if i >= e.maxY-2 {
+			break
+		}
 
-	log.Println(x, y)
-
-	e.stdscr.Move(0, 0)
-
-	for _, line := range e.text {
-		e.stdscr.Print(line)
+		e.stdscr.Println(line)
 	}
+
 	e.stdscr.Move(y, x)
 
 	e.stdscr.Refresh()
@@ -42,9 +42,9 @@ func (e *Editor) Init() {
 	gc.Echo(false)
 	e.stdscr.Keypad(true)
 
-	maxY, _ := e.stdscr.MaxYX()
+	e.maxY, e.maxX = e.stdscr.MaxYX()
 
-	e.text = make([]string, maxY)
+	e.text = make([]string, e.maxY)
 }
 func (e *Editor) End() {
 	gc.End()
@@ -61,16 +61,20 @@ func (e *Editor) Load(filePath string) error {
 		if r == 0x0D {
 			continue
 		}
+
 		chr := string(r)
-		e.text[lineNr] += chr
 
 		if chr == "\n" {
 			e.text = append(e.text, "")
 			lineNr++
+			continue
 		}
-	}
 
-	e.draw()
+		e.text[lineNr] += chr
+
+	}
+	y, x := e.stdscr.CursorYX()
+	e.draw(y, x)
 
 	return nil
 }
@@ -90,9 +94,7 @@ func (e *Editor) Run() error {
 			if x > len(e.text[y+1])-1 {
 				x = len(e.text[y+1]) - 1
 			}
-
-			e.stdscr.Move(y+1, x)
-
+			y++
 		case gc.KEY_UP:
 			if y <= 0 {
 				continue
@@ -101,30 +103,36 @@ func (e *Editor) Run() error {
 			if x > len(e.text[y-1])-1 {
 				x = len(e.text[y-1]) - 1
 			}
-
-			e.stdscr.Move(y-1, x)
+			y--
 		case gc.KEY_LEFT:
 			if x <= 0 {
-				continue
+				if y > 0 {
+					y--
+					x = len(e.text[y])
+				}
 			}
-
-			e.stdscr.Move(y, x-1)
-
+			x--
 		case gc.KEY_RIGHT:
-			if x >= len(e.text[y])-1 {
+			if x >= len(e.text[y]) {
 				continue
 			}
-
-			e.stdscr.Move(y, x+1)
-
+			x++
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			e.text[y] = e.text[y][:x] + "\n" + e.text[y][x:]
+			newLine := e.text[y][:x]
+			e.text[y] = e.text[y][x:]
 
-			if y+1 >= len(e.text) {
-				e.text = append(e.text, "")
-			}
+			before := make([]string, len(e.text[:y]))
+			copy(before, e.text[:y])
 
-			e.stdscr.Move(y+1, x)
+			before = append(before, newLine)
+
+			rest := make([]string, len(e.text[y:]))
+			copy(rest, e.text[y:])
+
+			e.text = append(before, rest...)
+
+			y++
+			x = 0
 
 		case gc.KEY_TAB:
 		case gc.KEY_BACKSPACE:
@@ -132,17 +140,21 @@ func (e *Editor) Run() error {
 				if y == 0 {
 					continue
 				}
-				y -= 1
-				x = len(e.text[y]) - 1
+
+				line := e.text[y]
+
+				x = len(e.text[y-1])
+
+				e.text[y-1] += line
+				e.text = append(e.text[:y], e.text[y+1:]...)
+
+				y--
+
 			} else {
 				x--
+				e.text[y] = e.text[y][:x] + e.text[y][x+1:]
 			}
-			e.stdscr.Move(y, x)
-			err := e.stdscr.DelChar()
-			e.text[y] = e.text[y][:x] + e.text[y][x+1:]
-			if err != nil {
-				return err
-			}
+
 		default:
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {
@@ -150,8 +162,9 @@ func (e *Editor) Run() error {
 			}
 
 			e.text[y] = e.text[y][:x] + chr + e.text[y][x:]
+			x++
 		}
-		e.draw()
+		e.draw(y, x)
 	}
 }
 func (e *Editor) Save(filepath string) error {
@@ -188,7 +201,7 @@ func main() {
 		panic(err)
 	}
 	if *path != "" {
-		err := e.Save(*path)
+		// err := e.Save(*path)
 		if err != nil {
 			panic(err)
 		}
