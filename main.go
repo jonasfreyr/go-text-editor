@@ -1,11 +1,12 @@
 package main
 
 import (
-	"flag"
-	gc "github.com/rthornton128/goncurses"
+	"fmt"
 	"log"
 	"os"
 	"strings"
+
+	gc "github.com/rthornton128/goncurses"
 )
 
 type Editor struct {
@@ -13,22 +14,53 @@ type Editor struct {
 	stdscr *gc.Window
 
 	maxX, maxY int
+
+	x, y int
+
+	currLengthIndex int
+
+	printLineStartIndex int
+	printLinesIndex     int
 }
 
-func (e *Editor) draw(y, x int) {
+func (e *Editor) draw() {
+	gc.Cursor(0)
+
 	e.stdscr.Clear()
 
-	for i, line := range e.text {
-		if i >= e.maxY-2 {
+	if e.x-e.printLineStartIndex > e.maxX-1 {
+		e.printLineStartIndex = e.x - e.maxX + 1
+	} else if e.x < e.printLineStartIndex {
+		e.printLineStartIndex = e.x
+	}
+
+	if e.y-e.printLinesIndex > e.maxY-1 {
+		e.printLinesIndex = e.y - e.maxY + 1
+	} else if e.y < e.printLinesIndex {
+		e.printLinesIndex = e.y
+	}
+
+	for i, line := range e.text[e.printLinesIndex:] {
+		if i >= e.maxY {
 			break
+		}
+
+		if len(line) <= e.printLineStartIndex {
+			e.stdscr.Println()
+			continue
+		}
+		line = line[e.printLineStartIndex:]
+		if len(line) > e.maxX-1 {
+			line = line[:e.maxX-1]
 		}
 
 		e.stdscr.Println(line)
 	}
 
-	e.stdscr.Move(y, x)
-
+	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
 	e.stdscr.Refresh()
+
+	gc.Cursor(1)
 }
 
 func (e *Editor) Init() {
@@ -44,7 +76,7 @@ func (e *Editor) Init() {
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 
-	e.text = make([]string, e.maxY)
+	e.text = make([]string, 1)
 }
 func (e *Editor) End() {
 	gc.End()
@@ -73,102 +105,125 @@ func (e *Editor) Load(filePath string) error {
 		e.text[lineNr] += chr
 
 	}
-	y, x := e.stdscr.CursorYX()
-	e.draw(y, x)
+	e.y, e.x = e.stdscr.CursorYX()
+	e.draw()
+
+	e.currLengthIndex = e.x
 
 	return nil
 }
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
-		y, x := e.stdscr.CursorYX()
+
+		updateLengthIndex := true
 
 		switch key {
 		case gc.KEY_ESC:
 			return nil
 		case gc.KEY_DOWN:
-			if y >= len(e.text)-1 {
+			if e.y >= len(e.text)-1 {
 				continue
 			}
 
-			if x > len(e.text[y+1])-1 {
-				x = len(e.text[y+1]) - 1
+			if e.currLengthIndex > len(e.text[e.y+1]) {
+				e.x = len(e.text[e.y+1])
+			} else {
+				e.x = e.currLengthIndex
 			}
-			y++
+			e.y++
+			updateLengthIndex = false
 		case gc.KEY_UP:
-			if y <= 0 {
+			if e.y <= 0 {
 				continue
 			}
 
-			if x > len(e.text[y-1])-1 {
-				x = len(e.text[y-1]) - 1
+			if e.currLengthIndex > len(e.text[e.y-1]) {
+				e.x = len(e.text[e.y-1])
+			} else {
+				e.x = e.currLengthIndex
 			}
-			y--
+			e.y--
+			updateLengthIndex = false
 		case gc.KEY_LEFT:
-			if x <= 0 {
-				if y > 0 {
-					y--
-					x = len(e.text[y])
+			if e.x <= 0 {
+				if e.y > 0 {
+					e.y--
+					e.x = len(e.text[e.y])
 				}
+			} else {
+				e.x--
 			}
-			x--
 		case gc.KEY_RIGHT:
-			if x >= len(e.text[y]) {
-				continue
+			if e.x >= len(e.text[e.y]) {
+				if e.y < len(e.text)-1 {
+					e.y++
+					e.x = 0
+				}
+			} else {
+				e.x++
 			}
-			x++
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			newLine := e.text[y][:x]
-			e.text[y] = e.text[y][x:]
+			newLine := e.text[e.y][:e.x]
+			e.text[e.y] = e.text[e.y][e.x:]
 
-			before := make([]string, len(e.text[:y]))
-			copy(before, e.text[:y])
+			before := make([]string, len(e.text[:e.y]))
+			copy(before, e.text[:e.y])
 
 			before = append(before, newLine)
 
-			rest := make([]string, len(e.text[y:]))
-			copy(rest, e.text[y:])
+			rest := make([]string, len(e.text[e.y:]))
+			copy(rest, e.text[e.y:])
 
 			e.text = append(before, rest...)
 
-			y++
-			x = 0
-
+			e.y++
+			e.x = 0
 		case gc.KEY_TAB:
+			e.text[e.y] = e.text[e.y][:e.x] + "    " + e.text[e.y][e.x:]
+			e.x += 4
+		case gc.KEY_END:
+			e.x = len(e.text[e.y])
+		case gc.KEY_HOME:
+			e.x = 0
 		case gc.KEY_BACKSPACE:
-			if x == 0 {
-				if y == 0 {
+			if e.x == 0 {
+				if e.y == 0 {
 					continue
 				}
 
-				line := e.text[y]
+				line := e.text[e.y]
 
-				x = len(e.text[y-1])
+				e.x = len(e.text[e.y-1])
 
-				e.text[y-1] += line
-				e.text = append(e.text[:y], e.text[y+1:]...)
+				e.text[e.y-1] += line
+				e.text = append(e.text[:e.y], e.text[e.y+1:]...)
 
-				y--
+				e.y--
 
 			} else {
-				x--
-				e.text[y] = e.text[y][:x] + e.text[y][x+1:]
+				e.x--
+				e.text[e.y] = e.text[e.y][:e.x] + e.text[e.y][e.x+1:]
 			}
-
 		default:
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {
 				continue
 			}
 
-			e.text[y] = e.text[y][:x] + chr + e.text[y][x:]
-			x++
+			e.text[e.y] = e.text[e.y][:e.x] + chr + e.text[e.y][e.x:]
+			e.x++
 		}
-		e.draw(y, x)
+
+		if updateLengthIndex {
+			e.currLengthIndex = e.x
+		}
+
+		e.draw()
 	}
 }
 func (e *Editor) Save(filepath string) error {
-	data := []byte(strings.Join(e.text, ""))
+	data := []byte(strings.Join(e.text, "\n"))
 	err := os.WriteFile(filepath, data, 0666)
 	if err != nil {
 		return err
@@ -177,9 +232,12 @@ func (e *Editor) Save(filepath string) error {
 }
 
 func main() {
-	path := flag.String("filepath", "", "Path to the file you want to load")
+	if len(os.Args) <= 1 {
+		fmt.Println("missing argument {file}")
+		os.Exit(1)
+	}
 
-	flag.Parse()
+	path := os.Args[1]
 
 	e := &Editor{}
 	e.Init()
@@ -189,19 +247,16 @@ func main() {
 	log.SetOutput(f)
 	defer f.Close()
 
-	if *path != "" {
-		err := e.Load(*path)
-		if err != nil {
-			panic(err)
-		}
+	if path != "" {
+		_ = e.Load(path)
 	}
 
 	err := e.Run()
 	if err != nil {
 		panic(err)
 	}
-	if *path != "" {
-		// err := e.Save(*path)
+	if path != "" {
+		err := e.Save(path)
 		if err != nil {
 			panic(err)
 		}
