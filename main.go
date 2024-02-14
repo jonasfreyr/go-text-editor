@@ -48,7 +48,6 @@ func toTokens(line string) []string {
 	}
 	return newLine
 }
-
 func (e *Editor) draw() {
 	gc.Cursor(0)
 
@@ -121,7 +120,6 @@ func (e *Editor) draw() {
 
 	gc.Cursor(1)
 }
-
 func (e *Editor) initColor() error {
 	if !gc.HasColors() {
 		return nil
@@ -144,7 +142,6 @@ func (e *Editor) initColor() error {
 
 	return nil
 }
-
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
@@ -180,7 +177,6 @@ func (e *Editor) deleteLines(y, num int) {
 		e.text = append(e.text[:y], e.text[y+num:]...)
 	}
 }
-
 func (e *Editor) clampXToLineOrLengthIndex() {
 	if e.currLengthIndex > len(e.text[e.y]) {
 		e.x = len(e.text[e.y])
@@ -188,7 +184,6 @@ func (e *Editor) clampXToLineOrLengthIndex() {
 		e.x = e.currLengthIndex
 	}
 }
-
 func (e *Editor) Load(filePath string) error {
 	lines, err := os.ReadFile(filePath)
 	if err != nil {
@@ -369,7 +364,6 @@ func (e *Editor) Save(filepath string) error {
 	}
 	return nil
 }
-
 func main() {
 	if len(os.Args) <= 1 {
 		fmt.Println("missing argument {file}")
