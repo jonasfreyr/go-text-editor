@@ -25,6 +25,30 @@ type Editor struct {
 	printLinesIndex     int
 }
 
+func toTokens(line string) []string {
+	newLine := make([]string, 0)
+	currentToken := ""
+	for _, c := range line {
+		char := string(c)
+
+		if char == " " {
+			if currentToken != "" {
+				newLine = append(newLine, currentToken)
+			}
+			newLine = append(newLine, char)
+			currentToken = ""
+			continue
+		}
+
+		currentToken += char
+	}
+
+	if currentToken != "" {
+		newLine = append(newLine, currentToken)
+	}
+	return newLine
+}
+
 func (e *Editor) draw() {
 	gc.Cursor(0)
 
@@ -51,12 +75,45 @@ func (e *Editor) draw() {
 			e.stdscr.Println()
 			continue
 		}
-		line = line[e.printLineStartIndex:]
-		if len(line) > e.maxX-1 {
-			line = line[:e.maxX-1]
-		}
 
-		e.stdscr.Println(line)
+		tokens := toTokens(line)
+
+		// line = line[e.printLineStartIndex:]
+		//if len(line) > e.maxX-1 {
+		//	line = line[:e.maxX-1]
+		//}
+
+		currentPrintIndex := 0
+		colorStarted := false
+		for _, token := range tokens {
+			if token == "func" {
+				e.stdscr.ColorOn(1)
+				colorStarted = true
+			}
+			if currentPrintIndex > e.maxX {
+				break
+			}
+			if currentPrintIndex < e.printLineStartIndex && currentPrintIndex+len(token) < e.printLineStartIndex {
+				continue
+			}
+
+			if currentPrintIndex < e.printLineStartIndex && currentPrintIndex+len(token) > e.printLineStartIndex {
+				token = token[e.printLineStartIndex-currentPrintIndex:]
+			}
+
+			if currentPrintIndex+len(token) > e.maxX {
+				token = token[:e.maxX-1-currentPrintIndex]
+			}
+
+			e.stdscr.Print(token)
+			currentPrintIndex += len(token)
+
+			if colorStarted {
+				e.stdscr.ColorOff(1)
+			}
+		}
+		e.stdscr.Println()
+
 	}
 
 	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
@@ -65,12 +122,41 @@ func (e *Editor) draw() {
 	gc.Cursor(1)
 }
 
+func (e *Editor) initColor() error {
+	if !gc.HasColors() {
+		return nil
+	}
+
+	err := gc.StartColor()
+	if err != nil {
+		return err
+	}
+
+	err = gc.UseDefaultColors()
+	if err != nil {
+		return err
+	}
+
+	err = gc.InitPair(1, gc.C_BLUE, -1)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
 
 	if err != nil {
 		log.Fatal("init", err)
+	}
+
+	err = e.initColor()
+	if err != nil {
+		e.End()
+		log.Fatal(err)
 	}
 
 	gc.Echo(false)
@@ -124,6 +210,10 @@ func (e *Editor) Load(filePath string) error {
 			continue
 		}
 
+		if chr == "\t" {
+			chr = "    "
+		}
+
 		e.text[lineNr] += chr
 
 	}
@@ -139,8 +229,6 @@ func (e *Editor) Run() error {
 		key := e.stdscr.GetChar()
 
 		updateLengthIndex := true
-
-		log.Println("This thing:", key)
 
 		switch key {
 		case gc.KEY_ESC:
