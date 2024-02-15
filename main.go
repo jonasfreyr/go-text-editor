@@ -1,15 +1,29 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/atotto/clipboard"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/jonasfreyr/playground/utils"
 	gc "github.com/rthornton128/goncurses"
 )
+
+type highlightingConfig struct {
+	Literals      []string `json:"literals"`
+	BuiltIns      []string `json:"built_ins"`
+	Types         []string `json:"types"`
+	Keywords      []string `json:"keywords"`
+	Comment       []string `json:"comment"`
+	LiteralsColor []int    `json:"literals-color"`
+	BuiltInsColor []int    `json:"built_ins-color"`
+	TypesColor    []int    `json:"types-color"`
+	KeywordsColor []int    `json:"keywords-color"`
+	CommentColor  []int    `json:"comment-color"`
+}
 
 type Editor struct {
 	text   []string
@@ -23,6 +37,8 @@ type Editor struct {
 
 	printLineStartIndex int
 	printLinesIndex     int
+
+	highlightWords map[string]int
 }
 
 func toTokens(line string) []string {
@@ -48,6 +64,15 @@ func toTokens(line string) []string {
 	}
 	return newLine
 }
+
+func (e *Editor) enableIfColor(word string) int {
+	if color, ok := e.highlightWords[word]; ok {
+		e.stdscr.ColorOn(int16(color))
+		return color
+	}
+	return 0
+}
+
 func (e *Editor) draw() {
 	gc.Cursor(0)
 
@@ -78,17 +103,14 @@ func (e *Editor) draw() {
 		tokens := toTokens(line)
 
 		// line = line[e.printLineStartIndex:]
-		//if len(line) > e.maxX-1 {
-		//	line = line[:e.maxX-1]
-		//}
+		// if len(line) > e.maxX-1 {
+		//    line = line[:e.maxX-1]
+		// }
 
 		currentPrintIndex := 0
-		colorStarted := false
 		for _, token := range tokens {
-			if token == "func" {
-				e.stdscr.ColorOn(1)
-				colorStarted = true
-			}
+			color := e.enableIfColor(token)
+
 			if currentPrintIndex > e.maxX {
 				break
 			}
@@ -107,8 +129,8 @@ func (e *Editor) draw() {
 			e.stdscr.Print(token)
 			currentPrintIndex += len(token)
 
-			if colorStarted {
-				e.stdscr.ColorOff(1)
+			if color != 0 {
+				e.stdscr.ColorOff((int16)(color))
 			}
 		}
 		e.stdscr.Println()
@@ -120,6 +142,60 @@ func (e *Editor) draw() {
 
 	gc.Cursor(1)
 }
+
+func (e *Editor) setColor(index int, color []int) error {
+	err := gc.InitColor(int16(index), int16(color[0])*4, int16(color[1])*4, int16(color[2]*4))
+	if err != nil {
+		return err
+	}
+
+	err = gc.InitPair(int16(index), int16(index), -1)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (e *Editor) setColors() error {
+	f, err := os.Open("highlighting.json")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var config highlightingConfig
+	decoder := json.NewDecoder(f)
+	err = decoder.Decode(&config)
+
+	if err != nil {
+		return err
+	}
+
+	highlightingTypes := []string{"literals", "built_ins", "types", "keywords", "comment"}
+
+	e.highlightWords = make(map[string]int)
+
+	highlightWords := make(map[string][]string)
+	highlightWords["literals"] = config.Literals
+	highlightWords["built_ins"] = config.BuiltIns
+	highlightWords["types"] = config.Types
+	highlightWords["keywords"] = config.Keywords
+	highlightWords["comment"] = config.Comment
+
+	for i, colorArray := range [][]int{config.LiteralsColor, config.BuiltInsColor, config.TypesColor, config.KeywordsColor, config.CommentColor} {
+		err = e.setColor(i+1, colorArray)
+		if err != nil {
+			return err
+		}
+		for _, word := range highlightWords[highlightingTypes[i]] {
+			e.highlightWords[word] = i + 1
+		}
+	}
+
+	return nil
+}
+
 func (e *Editor) initColor() error {
 	if !gc.HasColors() {
 		return nil
@@ -135,11 +211,10 @@ func (e *Editor) initColor() error {
 		return err
 	}
 
-	err = gc.InitPair(1, gc.C_BLUE, -1)
+	err = e.setColors()
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 func (e *Editor) Init() {

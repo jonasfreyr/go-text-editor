@@ -75,12 +75,12 @@
     "var"
   ],
 
-  "comment": "//",
+  "comment": ["//"],
 
 
-  "literals-color": {},
-  "built_ins-color": {},
-  "types-color": {},
-  "keywords-color": {},
-  "comment-color": {}
+  "literals-color": [104,151,187],
+  "built_ins-color": [250,198,109],
+  "types-color": [152,118,170],
+  "keywords-color": [100,53,0],
+  "comment-color": [128,128,128]
 }
