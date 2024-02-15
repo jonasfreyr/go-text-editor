@@ -26,7 +26,6 @@ type highlightingConfig struct {
 }
 
 type Editor struct {
-	text   []string
 	stdscr *gc.Window
 
 	maxX, maxY int
@@ -39,20 +38,49 @@ type Editor struct {
 	printLinesIndex     int
 
 	highlightWords map[string]int
+
+	tokens [][]Token
 }
 
-func toTokens(line string) []string {
-	newLine := make([]string, 0)
+func tokensToText(tokens [][]Token) []string {
+	text := make([]string, len(tokens))
+	for i, tokenLine := range tokens {
+		text[i] = tokensToLine(tokenLine)
+	}
+
+	return text
+}
+
+func tokensToLine(tokens []Token) string {
+	line := ""
+	for _, token := range tokens {
+		line += token.Token()
+	}
+	return line
+}
+
+func textToTokens(text []string) [][]Token {
+	tokens := make([][]Token, len(text))
+	for lineNr, line := range text {
+		tokens[lineNr] = lineToTokens(line)
+	}
+	return tokens
+}
+
+func lineToTokens(line string) []Token {
+	newLine := make([]Token, 0)
 	currentToken := ""
-	for _, c := range line {
+	currentTokenIndex := 0
+	for index, c := range line {
 		char := string(c)
 
 		if char == " " {
 			if currentToken != "" {
-				newLine = append(newLine, currentToken)
+				newLine = append(newLine, Token{currentToken, currentTokenIndex})
 			}
-			newLine = append(newLine, char)
+			newLine = append(newLine, Token{char, index})
 			currentToken = ""
+			currentTokenIndex = index + 1
 			continue
 		}
 
@@ -60,7 +88,7 @@ func toTokens(line string) []string {
 	}
 
 	if currentToken != "" {
-		newLine = append(newLine, currentToken)
+		newLine = append(newLine, Token{currentToken, currentTokenIndex})
 	}
 	return newLine
 }
@@ -90,25 +118,20 @@ func (e *Editor) draw() {
 		e.printLinesIndex = e.y
 	}
 
-	for i, line := range e.text[e.printLinesIndex:] {
+	for i, line := range e.tokens[e.printLinesIndex:] {
 		if i >= e.maxY {
 			break
 		}
 
+		// TODO: Think differently
 		if len(line) <= e.printLineStartIndex {
 			e.stdscr.Println()
 			continue
 		}
 
-		tokens := toTokens(line)
-
-		// line = line[e.printLineStartIndex:]
-		// if len(line) > e.maxX-1 {
-		//    line = line[:e.maxX-1]
-		// }
-
 		currentPrintIndex := 0
-		for _, token := range tokens {
+		for _, t := range line {
+			token := t.Token()
 			color := e.enableIfColor(token)
 
 			if currentPrintIndex > e.maxX {
@@ -142,7 +165,6 @@ func (e *Editor) draw() {
 
 	gc.Cursor(1)
 }
-
 func (e *Editor) setColor(index int, color []int) error {
 	err := gc.InitColor(int16(index), int16(color[0])*4, int16(color[1])*4, int16(color[2]*4))
 	if err != nil {
@@ -156,7 +178,6 @@ func (e *Editor) setColor(index int, color []int) error {
 
 	return nil
 }
-
 func (e *Editor) setColors() error {
 	f, err := os.Open("highlighting.json")
 	if err != nil {
@@ -195,7 +216,6 @@ func (e *Editor) setColors() error {
 
 	return nil
 }
-
 func (e *Editor) initColor() error {
 	if !gc.HasColors() {
 		return nil
@@ -233,10 +253,12 @@ func (e *Editor) Init() {
 
 	gc.Echo(false)
 	e.stdscr.Keypad(true)
+	gc.SetTabSize(4)
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 
-	e.text = make([]string, 1)
+	e.tokens = make([][]Token, 1)
+	e.tokens[0] = make([]Token, 0)
 }
 func (e *Editor) End() {
 	gc.End()
@@ -244,17 +266,17 @@ func (e *Editor) End() {
 
 // This needs testing when it comes to multi line deletes
 func (e *Editor) deleteLines(y, num int) {
-	if len(e.text) <= 0 {
+	if len(e.tokens) <= 0 {
 		return
-	} else if len(e.text) == 1 {
-		e.text[y] = ""
+	} else if len(e.tokens) == 1 {
+		e.tokens[y] = make([]Token, 0)
 	} else {
-		e.text = append(e.text[:y], e.text[y+num:]...)
+		e.tokens = append(e.tokens[:y], e.tokens[y+num:]...)
 	}
 }
-func (e *Editor) clampXToLineOrLengthIndex() {
-	if e.currLengthIndex > len(e.text[e.y]) {
-		e.x = len(e.text[e.y])
+func (e *Editor) clampXToLineOrLengthIndex(line string) {
+	if e.currLengthIndex > len(line) {
+		e.x = len(line)
 	} else {
 		e.x = e.currLengthIndex
 	}
@@ -265,7 +287,7 @@ func (e *Editor) Load(filePath string) error {
 		return err
 	}
 
-	e.text = make([]string, 1)
+	text := make([]string, 1)
 	lineNr := 0
 	for _, r := range lines {
 		if r == 0x0D {
@@ -275,7 +297,7 @@ func (e *Editor) Load(filePath string) error {
 		chr := string(r)
 
 		if chr == "\n" {
-			e.text = append(e.text, "")
+			text = append(text, "")
 			lineNr++
 			continue
 		}
@@ -284,9 +306,11 @@ func (e *Editor) Load(filePath string) error {
 			chr = "    "
 		}
 
-		e.text[lineNr] += chr
+		text[lineNr] += chr
 
 	}
+	e.tokens = textToTokens(text)
+
 	e.y, e.x = e.stdscr.CursorYX()
 	e.draw()
 
@@ -299,15 +323,16 @@ func (e *Editor) Run() error {
 		key := e.stdscr.GetChar()
 
 		updateLengthIndex := true
+		currentLine := tokensToLine(e.tokens[e.y])
 
 		switch key {
 		case gc.KEY_ESC:
 			return nil
 		case 561: // CTRL + Right
-			str := e.text[e.y][e.x:]
+			str := currentLine[e.x:]
 			i := strings.Index(str, " ")
 			if i == -1 {
-				e.x = len(e.text[e.y])
+				e.x = len(currentLine)
 			} else if i == 0 {
 				e.x++
 			} else {
@@ -315,7 +340,7 @@ func (e *Editor) Run() error {
 			}
 		case 526: // CTRL + Down
 		case 546: // CTRL + Left
-			str := e.text[e.y][:e.x]
+			str := currentLine[:e.x]
 			i := strings.LastIndex(str, " ")
 			if i == -1 {
 				e.x = 0
@@ -328,22 +353,22 @@ func (e *Editor) Run() error {
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
 			e.y--
-			e.y = utils.Min(utils.Max(len(e.text)-1, 0), utils.Max(e.y, 0))
-			e.clampXToLineOrLengthIndex()
+			e.y = utils.Min(utils.Max(len(e.tokens)-1, 0), utils.Max(e.y, 0))
+			e.clampXToLineOrLengthIndex(tokensToLine(e.tokens[e.y]))
 		case 24: // CTRL + X
-			text := e.text[e.y] + "\n"
+			text := currentLine + "\n"
 			err := clipboard.WriteAll(text)
 			e.deleteLines(e.y, 1)
 			if err != nil {
 				panic(err)
 			}
 		case gc.KEY_DOWN:
-			if e.y >= len(e.text)-1 {
+			if e.y >= len(e.tokens)-1 {
 				continue
 			}
 
 			e.y++
-			e.clampXToLineOrLengthIndex()
+			e.clampXToLineOrLengthIndex(tokensToLine(e.tokens[e.y]))
 			updateLengthIndex = false
 		case gc.KEY_UP:
 			if e.y <= 0 {
@@ -351,20 +376,20 @@ func (e *Editor) Run() error {
 			}
 
 			e.y--
-			e.clampXToLineOrLengthIndex()
+			e.clampXToLineOrLengthIndex(tokensToLine(e.tokens[e.y]))
 			updateLengthIndex = false
 		case gc.KEY_LEFT:
 			if e.x <= 0 {
 				if e.y > 0 {
 					e.y--
-					e.x = len(e.text[e.y])
+					e.x = len(tokensToLine(e.tokens[e.y]))
 				}
 			} else {
 				e.x--
 			}
 		case gc.KEY_RIGHT:
-			if e.x >= len(e.text[e.y]) {
-				if e.y < len(e.text)-1 {
+			if e.x >= len(currentLine) {
+				if e.y < len(e.tokens)-1 {
 					e.y++
 					e.x = 0
 				}
@@ -372,26 +397,27 @@ func (e *Editor) Run() error {
 				e.x++
 			}
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			newLine := e.text[e.y][:e.x]
-			e.text[e.y] = e.text[e.y][e.x:]
+			newLine := currentLine[:e.x]
+			e.tokens[e.y] = lineToTokens(currentLine[e.x:])
 
-			before := make([]string, len(e.text[:e.y]))
-			copy(before, e.text[:e.y])
+			before := make([][]Token, len(e.tokens[:e.y]))
+			copy(before, e.tokens[:e.y])
 
-			before = append(before, newLine)
+			before = append(before, lineToTokens(newLine))
 
-			rest := make([]string, len(e.text[e.y:]))
-			copy(rest, e.text[e.y:])
+			rest := make([][]Token, len(e.tokens[e.y:]))
+			copy(rest, e.tokens[e.y:])
 
-			e.text = append(before, rest...)
+			e.tokens = append(before, rest...)
 
 			e.y++
 			e.x = 0
 		case gc.KEY_TAB:
-			e.text[e.y] = e.text[e.y][:e.x] + "    " + e.text[e.y][e.x:]
+			currentLine = currentLine[:e.x] + "\t" + currentLine[e.x:]
+			e.tokens[e.y] = lineToTokens(currentLine)
 			e.x += 4
 		case gc.KEY_END:
-			e.x = len(e.text[e.y])
+			e.x = len(tokensToLine(e.tokens[e.y]))
 		case gc.KEY_HOME:
 			e.x = 0
 		case gc.KEY_BACKSPACE:
@@ -400,18 +426,18 @@ func (e *Editor) Run() error {
 					continue
 				}
 
-				line := e.text[e.y]
+				e.x = len(tokensToLine(e.tokens[e.y-1]))
 
-				e.x = len(e.text[e.y-1])
+				e.tokens[e.y-1] = append(e.tokens[e.y-1], lineToTokens(currentLine)...)
 
-				e.text[e.y-1] += line
-				e.text = append(e.text[:e.y], e.text[e.y+1:]...)
+				e.tokens = append(e.tokens[:e.y], e.tokens[e.y+1:]...)
 
 				e.y--
 
 			} else {
 				e.x--
-				e.text[e.y] = e.text[e.y][:e.x] + e.text[e.y][e.x+1:]
+				newLine := currentLine[:e.x] + currentLine[e.x+1:]
+				e.tokens[e.y] = lineToTokens(newLine)
 			}
 		default:
 			chr := gc.KeyString(key)
@@ -419,7 +445,7 @@ func (e *Editor) Run() error {
 				continue
 			}
 
-			e.text[e.y] = e.text[e.y][:e.x] + chr + e.text[e.y][e.x:]
+			e.tokens[e.y] = lineToTokens(currentLine[:e.x] + chr + currentLine[e.x:])
 			e.x++
 		}
 
@@ -427,12 +453,13 @@ func (e *Editor) Run() error {
 			e.currLengthIndex = e.x
 		}
 
-		e.y = utils.Min(utils.Max(len(e.text)-1, 0), e.y)
+		e.y = utils.Min(utils.Max(len(e.tokens)-1, 0), e.y)
+
 		e.draw()
 	}
 }
 func (e *Editor) Save(filepath string) error {
-	data := []byte(strings.Join(e.text, "\n"))
+	data := []byte(strings.Join(tokensToText(e.tokens), "\n"))
 	err := os.WriteFile(filepath, data, 0666)
 	if err != nil {
 		return err
@@ -468,7 +495,7 @@ func main() {
 		panic(err)
 	}
 	if path != "" {
-		err := e.Save(path)
+		// err := e.Save(path)
 		if err != nil {
 			panic(err)
 		}
