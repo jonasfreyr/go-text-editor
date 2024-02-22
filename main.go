@@ -31,6 +31,7 @@ type Editor struct {
 	maxX, maxY int
 
 	x, y int
+	visX int
 
 	currLengthIndex int
 
@@ -57,6 +58,14 @@ func tokensToLine(tokens []Token) string {
 		line += token.Token()
 	}
 	return line
+}
+
+func tokenLineLength(tokens []Token) int {
+	l := 0
+	for _, token := range tokens {
+		l += token.Length()
+	}
+	return l
 }
 
 func textToTokens(text []string) [][]Token {
@@ -123,16 +132,19 @@ func (e *Editor) draw() {
 			break
 		}
 
-		// TODO: Think differently
-		if len(line) <= e.printLineStartIndex {
+		if tokenLineLength(line) <= e.printLineStartIndex {
 			e.stdscr.Println()
 			continue
 		}
 
 		currentPrintIndex := 0
+		color := 0
 		for _, t := range line {
+			if color != 0 {
+				e.stdscr.ColorOff((int16)(color))
+			}
 			token := t.Token()
-			color := e.enableIfColor(token)
+			color = e.enableIfColor(token)
 
 			if currentPrintIndex > e.maxX {
 				break
@@ -151,10 +163,9 @@ func (e *Editor) draw() {
 
 			e.stdscr.Print(token)
 			currentPrintIndex += len(token)
-
-			if color != 0 {
-				e.stdscr.ColorOff((int16)(color))
-			}
+		}
+		if color != 0 {
+			e.stdscr.ColorOff((int16)(color))
 		}
 		e.stdscr.Println()
 
@@ -415,7 +426,7 @@ func (e *Editor) Run() error {
 		case gc.KEY_TAB:
 			currentLine = currentLine[:e.x] + "\t" + currentLine[e.x:]
 			e.tokens[e.y] = lineToTokens(currentLine)
-			e.x += 4
+			e.x++
 		case gc.KEY_END:
 			e.x = len(tokensToLine(e.tokens[e.y]))
 		case gc.KEY_HOME:
@@ -426,9 +437,9 @@ func (e *Editor) Run() error {
 					continue
 				}
 
-				e.x = len(tokensToLine(e.tokens[e.y-1]))
+				e.x = tokenLineLength(e.tokens[e.y-1])
 
-				e.tokens[e.y-1] = append(e.tokens[e.y-1], lineToTokens(currentLine)...)
+				e.tokens[e.y-1] = append(e.tokens[e.y-1], e.tokens[e.y]...)
 
 				e.tokens = append(e.tokens[:e.y], e.tokens[e.y+1:]...)
 
