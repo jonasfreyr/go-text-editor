@@ -43,6 +43,7 @@ type Editor struct {
 	tokens [][]Token
 }
 
+// Converts an array of arrays of tokens to an array of strings representing lines
 func tokensToText(tokens [][]Token) []string {
 	text := make([]string, len(tokens))
 	for i, tokenLine := range tokens {
@@ -83,7 +84,7 @@ func lineToTokens(line string) []Token {
 	for index, c := range line {
 		char := string(c)
 
-		if char == " " {
+		if char == " " || char == "\t" {
 			if currentToken != "" {
 				newLine = append(newLine, Token{currentToken, currentTokenIndex})
 			}
@@ -329,36 +330,45 @@ func (e *Editor) Load(filePath string) error {
 
 	return nil
 }
+
+func (e *Editor) lineIndexToTokenIndex(index, line int) int {
+	for i, token := range e.tokens[line] {
+		if index <= token.index+token.Length() {
+			return i
+		}
+	}
+	return 0
+}
+
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
 
 		updateLengthIndex := true
 		currentLine := tokensToLine(e.tokens[e.y])
+		currentTokenIndex := e.lineIndexToTokenIndex(e.x, e.y)
 
 		switch key {
 		case gc.KEY_ESC:
 			return nil
 		case 561: // CTRL + Right
-			str := currentLine[e.x:]
-			i := strings.Index(str, " ")
-			if i == -1 {
-				e.x = len(currentLine)
-			} else if i == 0 {
-				e.x++
+			if e.x == tokenLineLength(e.tokens[e.y]) {
+				break
+			}
+			if e.x == e.tokens[e.y][currentTokenIndex].index+e.tokens[e.y][currentTokenIndex].Length() {
+				e.x = e.tokens[e.y][currentTokenIndex+1].index + e.tokens[e.y][currentTokenIndex+1].Length()
 			} else {
-				e.x = e.x + i
+				e.x = e.tokens[e.y][currentTokenIndex].index + e.tokens[e.y][currentTokenIndex].Length()
 			}
 		case 526: // CTRL + Down
 		case 546: // CTRL + Left
-			str := currentLine[:e.x]
-			i := strings.LastIndex(str, " ")
-			if i == -1 {
-				e.x = 0
-			} else if i == len(str)-1 {
-				e.x--
+			if e.x == 0 {
+				break
+			}
+			if e.x == e.tokens[e.y][currentTokenIndex].index {
+				e.x = e.tokens[e.y][currentTokenIndex-1].index
 			} else {
-				e.x = i + 1
+				e.x = e.tokens[e.y][currentTokenIndex].index
 			}
 		case 567: // CTRL + Up
 		case 4: // CTRL + D
@@ -424,9 +434,9 @@ func (e *Editor) Run() error {
 			e.y++
 			e.x = 0
 		case gc.KEY_TAB:
-			currentLine = currentLine[:e.x] + "\t" + currentLine[e.x:]
+			currentLine = currentLine[:e.x] + "    " + currentLine[e.x:]
 			e.tokens[e.y] = lineToTokens(currentLine)
-			e.x++
+			e.x += 4
 		case gc.KEY_END:
 			e.x = len(tokensToLine(e.tokens[e.y]))
 		case gc.KEY_HOME:
