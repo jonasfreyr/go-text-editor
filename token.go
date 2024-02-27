@@ -1,11 +1,11 @@
 package main
 
-type Token struct {
+type TextToken struct {
 	token string
 	index int
 }
 
-func (t *Token) Length() int {
+func (t *TextToken) Length() int {
 	if t.token == "\n" {
 		return 4
 	}
@@ -13,6 +13,6 @@ func (t *Token) Length() int {
 	return len(t.token)
 }
 
-func (t *Token) Token() string {
+func (t *TextToken) Token() string {
 	return t.token
 }

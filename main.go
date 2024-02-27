@@ -40,11 +40,11 @@ type Editor struct {
 
 	highlightWords map[string]int
 
-	tokens [][]Token
+	tokens [][]TextToken
 }
 
 // Converts an array of arrays of tokens to an array of strings representing lines
-func tokensToText(tokens [][]Token) []string {
+func tokensToText(tokens [][]TextToken) []string {
 	text := make([]string, len(tokens))
 	for i, tokenLine := range tokens {
 		text[i] = tokensToLine(tokenLine)
@@ -53,7 +53,7 @@ func tokensToText(tokens [][]Token) []string {
 	return text
 }
 
-func tokensToLine(tokens []Token) string {
+func tokensToLine(tokens []TextToken) string {
 	line := ""
 	for _, token := range tokens {
 		line += token.Token()
@@ -61,7 +61,7 @@ func tokensToLine(tokens []Token) string {
 	return line
 }
 
-func tokenLineLength(tokens []Token) int {
+func tokenLineLength(tokens []TextToken) int {
 	l := 0
 	for _, token := range tokens {
 		l += token.Length()
@@ -69,16 +69,16 @@ func tokenLineLength(tokens []Token) int {
 	return l
 }
 
-func textToTokens(text []string) [][]Token {
-	tokens := make([][]Token, len(text))
+func textToTokens(text []string) [][]TextToken {
+	tokens := make([][]TextToken, len(text))
 	for lineNr, line := range text {
 		tokens[lineNr] = lineToTokens(line)
 	}
 	return tokens
 }
 
-func lineToTokens(line string) []Token {
-	newLine := make([]Token, 0)
+func lineToTokens(line string) []TextToken {
+	newLine := make([]TextToken, 0)
 	currentToken := ""
 	currentTokenIndex := 0
 	for index, c := range line {
@@ -86,9 +86,9 @@ func lineToTokens(line string) []Token {
 
 		if char == " " || char == "\t" {
 			if currentToken != "" {
-				newLine = append(newLine, Token{currentToken, currentTokenIndex})
+				newLine = append(newLine, TextToken{currentToken, currentTokenIndex})
 			}
-			newLine = append(newLine, Token{char, index})
+			newLine = append(newLine, TextToken{char, index})
 			currentToken = ""
 			currentTokenIndex = index + 1
 			continue
@@ -98,7 +98,7 @@ func lineToTokens(line string) []Token {
 	}
 
 	if currentToken != "" {
-		newLine = append(newLine, Token{currentToken, currentTokenIndex})
+		newLine = append(newLine, TextToken{currentToken, currentTokenIndex})
 	}
 	return newLine
 }
@@ -269,8 +269,8 @@ func (e *Editor) Init() {
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 
-	e.tokens = make([][]Token, 1)
-	e.tokens[0] = make([]Token, 0)
+	e.tokens = make([][]TextToken, 1)
+	e.tokens[0] = make([]TextToken, 0)
 }
 func (e *Editor) End() {
 	gc.End()
@@ -281,7 +281,7 @@ func (e *Editor) deleteLines(y, num int) {
 	if len(e.tokens) <= 0 {
 		return
 	} else if len(e.tokens) == 1 {
-		e.tokens[y] = make([]Token, 0)
+		e.tokens[y] = make([]TextToken, 0)
 	} else {
 		e.tokens = append(e.tokens[:y], e.tokens[y+num:]...)
 	}
@@ -421,12 +421,12 @@ func (e *Editor) Run() error {
 			newLine := currentLine[:e.x]
 			e.tokens[e.y] = lineToTokens(currentLine[e.x:])
 
-			before := make([][]Token, len(e.tokens[:e.y]))
+			before := make([][]TextToken, len(e.tokens[:e.y]))
 			copy(before, e.tokens[:e.y])
 
 			before = append(before, lineToTokens(newLine))
 
-			rest := make([][]Token, len(e.tokens[e.y:]))
+			rest := make([][]TextToken, len(e.tokens[e.y:]))
 			copy(rest, e.tokens[e.y:])
 
 			e.tokens = append(before, rest...)

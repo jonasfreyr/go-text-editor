@@ -1,6 +1,10 @@
+import "fmt"
 
+func main(){
+    var thing bool
+    fmt.Println("I got color")
 
-asdasd asdas asd asd asd asd
-asdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasd
-asdasd
-asdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasd
+    if true || thing {
+        return -1
+    }
+}
