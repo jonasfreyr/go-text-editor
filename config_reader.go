@@ -10,8 +10,15 @@ type TokensConfig struct {
 	Color  [3]int   `json:"color"`
 }
 
+type ColorConfig struct {
+	Color [3]int `json:"color"`
+}
+
 type JSONConfig struct {
 	Literals TokensConfig `json:"literals"`
+	Digits   ColorConfig  `json:"digits"`
+	Strings  ColorConfig  `json:"strings"`
+	Default  ColorConfig  `json:"default"`
 	BuiltIns TokensConfig `json:"built_ins"`
 	Types    TokensConfig `json:"types"`
 	Keywords TokensConfig `json:"keywords"`

@@ -90,5 +90,14 @@
   "comment": {
     "tokens": ["//"],
     "color": [128,128,128]
+  },
+  "digits": {
+    "color": [104,151,187]
+  },
+  "strings": {
+    "color": [106,135,89]
+  },
+  "default": {
+    "color": [254, 254, 254]
   }
 }

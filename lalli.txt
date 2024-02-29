@@ -2,7 +2,7 @@ import "fmt"
 
 func main(){
     var thing bool
-    fmt.Println("I got color")
+    fmt.Println(len("I got color"))
 
     if true || thing {
         return -1

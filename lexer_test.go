@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -8,15 +9,7 @@ import (
 func TestLexer(t *testing.T) {
 	file := "lalli.txt"
 
-	f, err := os.Open(file)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var text []byte
-	_, err = f.Read(text)
-
+	text, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,5 +18,9 @@ func TestLexer(t *testing.T) {
 	tokens, err := l.Tokenize(string(text))
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	for _, token := range tokens {
+		fmt.Print("<" + token.lexeme + ">")
 	}
 }
