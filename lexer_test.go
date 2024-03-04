@@ -15,12 +15,15 @@ func TestLexer(t *testing.T) {
 	}
 
 	l := NewLexer()
-	tokens, err := l.Tokenize(string(text))
+	tokens := l.Tokenize(string(text))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, token := range tokens {
-		fmt.Print("<" + token.lexeme + ">")
+	for _, line := range tokens {
+		for _, token := range line {
+			fmt.Print("<" + token.lexeme + ">")
+		}
+		fmt.Println()
 	}
 }
