@@ -11,19 +11,6 @@ import (
 	gc "github.com/rthornton128/goncurses"
 )
 
-type highlightingConfig struct {
-	Literals      []string `json:"literals"`
-	BuiltIns      []string `json:"built_ins"`
-	Types         []string `json:"types"`
-	Keywords      []string `json:"keywords"`
-	Comment       []string `json:"comment"`
-	LiteralsColor []int    `json:"literals-color"`
-	BuiltInsColor []int    `json:"built_ins-color"`
-	TypesColor    []int    `json:"types-color"`
-	KeywordsColor []int    `json:"keywords-color"`
-	CommentColor  []int    `json:"comment-color"`
-}
-
 type Editor struct {
 	stdscr *gc.Window
 
@@ -42,24 +29,6 @@ type Editor struct {
 	colorMap map[string]int
 }
 
-// // Converts an array of arrays of tokens to an array of strings representing lines
-//
-//	func tokensToText(tokens []Token) []string {
-//		text := make([]string, len(tokens))
-//		for i, tokenLine := range tokens {
-//			text[i] = tokensToLine(tokenLine)
-//		}
-//
-//		return text
-//	}
-//
-//	func tokensToLine(tokens []Token) string {
-//		line := ""
-//		for _, token := range tokens {
-//			line += token.Token()
-//		}
-//		return line
-//	}
 func tokenLineLength(tokens []Token) int {
 	l := 0
 	for _, token := range tokens {
@@ -67,40 +36,6 @@ func tokenLineLength(tokens []Token) int {
 	}
 	return l
 }
-
-//func textToTokens(text []string) [][]Token {
-//	tokens := make([][]Token, len(text))
-//	for lineNr, line := range text {
-//		tokens[lineNr] = lineToTokens(line)
-//	}
-//	return tokens
-//}
-
-//func lineToTokens(line string) []Token {
-//	newLine := make([]Token, 0)
-//	currentToken := ""
-//	currentTokenIndex := 0
-//	for index, c := range line {
-//		char := string(c)
-//
-//		if char == " " || char == "\t" {
-//			if currentToken != "" {
-//				newLine = append(newLine, Token{currentToken, currentTokenIndex})
-//			}
-//			newLine = append(newLine, Token{char, index})
-//			currentToken = ""
-//			currentTokenIndex = index + 1
-//			continue
-//		}
-//
-//		currentToken += char
-//	}
-//
-//	if currentToken != "" {
-//		newLine = append(newLine, TextToken{currentToken, currentTokenIndex})
-//	}
-//	return newLine
-//}
 
 func (e *Editor) disableColor(color [3]int) {
 	key := utils.ColorToString(color)
@@ -143,30 +78,32 @@ func (e *Editor) draw() {
 			continue
 		}
 
-		currentPrintIndex := 0
 		for _, t := range line {
+			x := t.location.col - 1 - e.printLineStartIndex
 			token := t.Token()
+
+			// Either skip or cut tokens that are not on screen to the left
+			if x < 0 {
+				if x+len(token) < 0 {
+					continue
+				}
+
+				token = token[-x:]
+				x = 0
+			}
+
+			// Either skip or cut tokens that are not on screen to the right
+			maxX := e.maxX - 1 + e.printLineStartIndex
+			if x+len(token) > maxX {
+				if x > maxX {
+					continue
+				}
+
+				token = token[:maxX-x]
+			}
+
 			e.enableColor(t.color)
-
-			if currentPrintIndex > e.maxX {
-				e.disableColor(t.color)
-				break
-			}
-			if currentPrintIndex < e.printLineStartIndex && currentPrintIndex+len(token) < e.printLineStartIndex {
-				e.disableColor(t.color)
-				continue
-			}
-
-			if currentPrintIndex < e.printLineStartIndex && currentPrintIndex+len(token) > e.printLineStartIndex {
-				token = token[e.printLineStartIndex-currentPrintIndex:]
-			}
-
-			if currentPrintIndex+len(token) > e.maxX {
-				token = token[:e.maxX-1-currentPrintIndex]
-			}
-
-			e.stdscr.Print(token)
-			currentPrintIndex += len(token)
+			e.stdscr.MovePrint(i, x, token)
 			e.disableColor(t.color)
 		}
 		e.stdscr.Println()
@@ -175,7 +112,6 @@ func (e *Editor) draw() {
 
 	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
 	e.stdscr.Refresh()
-
 	gc.Cursor(1)
 }
 func (e *Editor) setColor(index int, color [3]int) error {
@@ -313,14 +249,6 @@ func (e *Editor) Load(filePath string) error {
 	return nil
 }
 
-//	func (e *Editor) lineIndexToTokenIndex(index, line int) int {
-//		for i, token := range e.lines[line] {
-//			if index <= token.location.col-1+token.Length() {
-//				return i
-//			}
-//		}
-//		return 0
-//	}
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()

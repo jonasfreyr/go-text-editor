@@ -64,9 +64,15 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 	return newTokens
 }
 
-func (l *Lexer) Tokenize(text string) [][]Token {
+func (l *Lexer) Reset() {
 	l.eof = false
 	l.ch = ""
+	l.line = 0
+	l.col = 0
+}
+
+func (l *Lexer) Tokenize(text string) [][]Token {
+	l.Reset()
 	tokens := make([][]Token, 0)
 	tokens = append(tokens, make([]Token, 0))
 	l.reader = strings.NewReader(text)
@@ -186,7 +192,6 @@ func (l *Lexer) next() Token {
 		}
 
 		return l.newToken(str, l.config.Strings.Color, loc)
-
 	default:
 		if unicode.IsLetter(rune(l.ch[0])) || l.ch == "_" {
 			str := l.ch
