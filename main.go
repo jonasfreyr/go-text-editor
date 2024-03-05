@@ -96,7 +96,7 @@ func (e *Editor) draw() {
 			maxX := e.maxX - 1
 			if x+len(token) > maxX {
 				if x > maxX {
-					continue
+					break
 				}
 
 				token = token[:maxX-x]
