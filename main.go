@@ -56,16 +56,16 @@ func (e *Editor) draw() {
 
 	e.stdscr.Clear()
 
-	if e.x-e.printLineStartIndex > e.maxX-1 {
-		e.printLineStartIndex = e.x - e.maxX + 1
-	} else if e.x < e.printLineStartIndex {
-		e.printLineStartIndex = e.x
+	if e.x-e.printLineStartIndex > e.maxX-4 {
+		e.printLineStartIndex = e.x - e.maxX + 4
+	} else if e.x-4 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(e.x-4, 0)
 	}
 
-	if e.y-e.printLinesIndex > e.maxY-1 {
-		e.printLinesIndex = e.y - e.maxY + 1
-	} else if e.y < e.printLinesIndex {
-		e.printLinesIndex = e.y
+	if e.y-e.printLinesIndex > e.maxY-4 {
+		e.printLinesIndex = e.y - e.maxY + 4
+	} else if e.y-4 < e.printLinesIndex {
+		e.printLinesIndex = utils.Max(e.y-4, 0)
 	}
 
 	for i, line := range tokens[e.printLinesIndex:] {
@@ -93,7 +93,7 @@ func (e *Editor) draw() {
 			}
 
 			// Either skip or cut tokens that are not on screen to the right
-			maxX := e.maxX - 1 + e.printLineStartIndex
+			maxX := e.maxX - 1
 			if x+len(token) > maxX {
 				if x > maxX {
 					continue
