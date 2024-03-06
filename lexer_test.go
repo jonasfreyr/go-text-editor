@@ -7,7 +7,7 @@ import (
 )
 
 func TestLexer(t *testing.T) {
-	file := "lalli.txt"
+	file := "tralli.txt"
 
 	text, err := os.ReadFile(file)
 	if err != nil {

@@ -1,5 +1,10 @@
 import "fmt"
 
+/*
+    This is a multiline comment
+    Here's the proof
+*/
+
 // Main function that will be run
 func main() int{
     var thing bool

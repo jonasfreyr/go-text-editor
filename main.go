@@ -13,7 +13,7 @@ import (
 )
 
 type Editor struct {
-	stdscr *gc.Window
+	stdscr *DoubleBufferWindow
 
 	maxX, maxY int
 
@@ -50,7 +50,18 @@ func (e *Editor) enableColor(color [3]int) {
 	e.stdscr.ColorOn(int16(colorIndex))
 }
 
-func (e *Editor) draw() {
+func (e *Editor) accountForTabs(y, x int) int {
+	extra := 0
+	for col, l := range e.lines[y][:x] {
+		if string(l) == "\t" {
+			extra += 4 - (col)%4
+		}
+	}
+
+	return utils.Max(extra-1, 0)
+}
+
+func (e *Editor) draw(swap bool) {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
 	if e.x-e.printLineStartIndex > e.maxX-4 {
@@ -65,9 +76,15 @@ func (e *Editor) draw() {
 		e.printLinesIndex = utils.Max(e.y-4, 0)
 	}
 
-	gc.Cursor(0)
+	err := gc.Cursor(0)
+	if err != nil {
+		log.Println(err)
+	}
 
-	e.stdscr.Clear()
+	err = e.stdscr.Clear()
+	if err != nil {
+		log.Println(err)
+	}
 	for i, line := range tokens[e.printLinesIndex:] {
 		if i >= e.maxY {
 			break
@@ -110,9 +127,16 @@ func (e *Editor) draw() {
 
 	}
 
-	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
-	e.stdscr.Refresh()
-	gc.Cursor(1)
+	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex+e.accountForTabs(e.y, e.x))
+	if swap {
+		e.stdscr.Refresh()
+	} else {
+		e.stdscr.NRefresh()
+	}
+	err = gc.Cursor(1)
+	if err != nil {
+		log.Println(err)
+	}
 }
 func (e *Editor) setColor(index int, color [3]int) error {
 	// log.Println("Setting color", index, color)
@@ -167,7 +191,7 @@ func (e *Editor) initColor() error {
 }
 func (e *Editor) Init() {
 	var err error
-	e.stdscr, err = gc.Init()
+	e.stdscr, err = NewDoubleBufferWindow()
 
 	if err != nil {
 		log.Fatal("init", err)
@@ -182,7 +206,11 @@ func (e *Editor) Init() {
 	}
 
 	gc.Echo(false)
-	e.stdscr.Keypad(true)
+	err = e.stdscr.Keypad(true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	gc.SetTabSize(4)
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
@@ -232,9 +260,9 @@ func (e *Editor) Load(filePath string) error {
 			continue
 		}
 
-		if chr == "\t" {
-			chr = "    "
-		}
+		//if chr == "\t" {
+		//	chr = "    "
+		//}
 
 		text[lineNr] += chr
 
@@ -244,7 +272,7 @@ func (e *Editor) Load(filePath string) error {
 	e.y, e.x = e.stdscr.CursorYX()
 
 	before := time.Now()
-	e.draw()
+	e.draw(false)
 	dt := time.Since(before)
 	log.Println(dt)
 
@@ -348,8 +376,8 @@ func (e *Editor) Run() error {
 			e.y++
 			e.x = 0
 		case gc.KEY_TAB:
-			e.lines[e.y] = e.lines[e.y][:e.x] + "    " + e.lines[e.y][e.x:]
-			e.x += 4
+			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
+			e.x++
 		case gc.KEY_END:
 			e.x = len(e.lines[e.y])
 		case gc.KEY_HOME:
@@ -389,7 +417,7 @@ func (e *Editor) Run() error {
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
 
-		e.draw()
+		e.draw(true)
 	}
 }
 func (e *Editor) Save(filepath string) error {
@@ -412,7 +440,7 @@ func main() {
 	e.Init()
 	defer e.End()
 
-	f, err := os.Create("info.txt")
+	f, err := os.Create("logs.txt")
 	if err != nil {
 		panic(err)
 	}
