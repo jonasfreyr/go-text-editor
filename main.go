@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/jonasfreyr/playground/utils"
@@ -52,10 +53,6 @@ func (e *Editor) enableColor(color [3]int) {
 func (e *Editor) draw() {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
-	gc.Cursor(0)
-
-	e.stdscr.Clear()
-
 	if e.x-e.printLineStartIndex > e.maxX-4 {
 		e.printLineStartIndex = e.x - e.maxX + 4
 	} else if e.x-4 < e.printLineStartIndex {
@@ -68,6 +65,9 @@ func (e *Editor) draw() {
 		e.printLinesIndex = utils.Max(e.y-4, 0)
 	}
 
+	gc.Cursor(0)
+
+	e.stdscr.Clear()
 	for i, line := range tokens[e.printLinesIndex:] {
 		if i >= e.maxY {
 			break
@@ -103,7 +103,7 @@ func (e *Editor) draw() {
 			}
 
 			e.enableColor(t.color)
-			e.stdscr.MovePrint(i, x, token)
+			e.stdscr.Print(token)
 			e.disableColor(t.color)
 		}
 		e.stdscr.Println()
@@ -242,7 +242,11 @@ func (e *Editor) Load(filePath string) error {
 	e.lines = text
 
 	e.y, e.x = e.stdscr.CursorYX()
+
+	before := time.Now()
 	e.draw()
+	dt := time.Since(before)
+	log.Println(dt)
 
 	e.currLengthIndex = e.x
 

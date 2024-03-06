@@ -58,8 +58,13 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 	newTokens := make([]Token, 0)
 	newLexemes := strings.Split(token.lexeme, "\n")
 
-	for _, lexeme := range newLexemes {
-		newTokens = append(newTokens, l.newToken(lexeme, token.color, token.location))
+	for i, lexeme := range newLexemes {
+		newLoc := Location{
+			line: token.location.line + i,
+			col:  1,
+		}
+
+		newTokens = append(newTokens, l.newToken(lexeme, token.color, newLoc))
 	}
 	return newTokens
 }
@@ -96,6 +101,7 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 				lineIndex++
 				tokens = append(tokens, make([]Token, 0))
 			}
+			lineIndex--
 			continue
 		}
 
