@@ -3,7 +3,29 @@ import "fmt"
 /*
     This is a multiline comment
     Here's the proof
+
 */
+
+type Palli struct{
+    x, y int
+    color [3]int
+}
+
+func NewPalli() *Palli{
+    return &Palli{
+        x: 0
+        y: 0
+    }
+}
+
+func (p *Palli) GetLocation() (int, int){
+    return p.x, p.y
+}
+
+func (p *Palli) GetColor() [3]int{
+    return p.color
+}
+
 
 // Main function that will be run
 func main() int{

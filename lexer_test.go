@@ -7,7 +7,7 @@ import (
 )
 
 func TestLexer(t *testing.T) {
-	file := "tralli.txt"
+	file := "lalli.txt"
 
 	text, err := os.ReadFile(file)
 	if err != nil {
@@ -22,7 +22,7 @@ func TestLexer(t *testing.T) {
 
 	for _, line := range tokens {
 		for _, token := range line {
-			fmt.Print("<" + token.lexeme + ">")
+			fmt.Printf("<%s-%d,%d>", token.lexeme, token.location.col, token.location.line)
 		}
 		fmt.Println()
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 type Editor struct {
-	stdscr *DoubleBufferWindow
+	stdscr *gc.Window
 
 	maxX, maxY int
 
@@ -28,6 +28,9 @@ type Editor struct {
 	lines    []string
 	lexer    *Lexer
 	colorMap map[string]int
+
+	selectedXStart, selectedYStart int
+	selectedXEnd, selectedYEnd     int
 }
 
 func tokenLineLength(tokens []Token) int {
@@ -37,30 +40,16 @@ func tokenLineLength(tokens []Token) int {
 	}
 	return l
 }
-
 func (e *Editor) disableColor(color [3]int) {
 	key := utils.ColorToString(color)
 	colorIndex := e.colorMap[key]
 	e.stdscr.ColorOff(int16(colorIndex))
 }
-
 func (e *Editor) enableColor(color [3]int) {
 	key := utils.ColorToString(color)
 	colorIndex := e.colorMap[key]
 	e.stdscr.ColorOn(int16(colorIndex))
 }
-
-func (e *Editor) accountForTabs(y, x int) int {
-	extra := 0
-	for col, l := range e.lines[y][:x] {
-		if string(l) == "\t" {
-			extra += 4 - (col)%4
-		}
-	}
-
-	return utils.Max(extra-1, 0)
-}
-
 func (e *Editor) draw(swap bool) {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
@@ -68,12 +57,6 @@ func (e *Editor) draw(swap bool) {
 		e.printLineStartIndex = e.x - e.maxX + 4
 	} else if e.x-4 < e.printLineStartIndex {
 		e.printLineStartIndex = utils.Max(e.x-4, 0)
-	}
-
-	if e.y-e.printLinesIndex > e.maxY-4 {
-		e.printLinesIndex = e.y - e.maxY + 4
-	} else if e.y-4 < e.printLinesIndex {
-		e.printLinesIndex = utils.Max(e.y-4, 0)
 	}
 
 	err := gc.Cursor(0)
@@ -120,22 +103,28 @@ func (e *Editor) draw(swap bool) {
 			}
 
 			e.enableColor(t.color)
-			e.stdscr.Print(token)
+			// e.stdscr.Move(i, x)
+			for _, chr := range token {
+				e.stdscr.AttrOn(gc.A_REVERSE)
+				e.stdscr.AddChar(gc.Char(chr))
+				e.stdscr.AttrOff(gc.A_REVERSE)
+			}
+			// e.stdscr.Print(token)
 			e.disableColor(t.color)
 		}
 		e.stdscr.Println()
 
 	}
 
-	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex+e.accountForTabs(e.y, e.x))
-	if swap {
-		e.stdscr.Refresh()
-	} else {
-		e.stdscr.NRefresh()
-	}
-	err = gc.Cursor(1)
-	if err != nil {
-		log.Println(err)
+	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
+
+	e.stdscr.Refresh()
+
+	if e.printLinesIndex <= e.y && e.y <= e.printLinesIndex+e.maxY {
+		err = gc.Cursor(1)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 }
 func (e *Editor) setColor(index int, color [3]int) error {
@@ -191,7 +180,8 @@ func (e *Editor) initColor() error {
 }
 func (e *Editor) Init() {
 	var err error
-	e.stdscr, err = NewDoubleBufferWindow()
+	//e.stdscr, err = NewDoubleBufferWindow()
+	e.stdscr, err = gc.Init()
 
 	if err != nil {
 		log.Fatal("init", err)
@@ -260,9 +250,9 @@ func (e *Editor) Load(filePath string) error {
 			continue
 		}
 
-		//if chr == "\t" {
-		//	chr = "    "
-		//}
+		if chr == "\t" {
+			chr = "    "
+		}
 
 		text[lineNr] += chr
 
@@ -280,12 +270,46 @@ func (e *Editor) Load(filePath string) error {
 
 	return nil
 }
+func (e *Editor) moveY(delta int) {
+	e.y = utils.Min(utils.Max(e.y+delta, 0), len(e.lines)-1)
 
+	e.clampXToLineOrLengthIndex()
+
+	if e.y-e.printLinesIndex > e.maxY-4 {
+		e.printLinesIndex = e.y - e.maxY + 4
+	} else if e.y-4 < e.printLinesIndex {
+		e.printLinesIndex = utils.Max(e.y-4, 0)
+	}
+}
+func (e *Editor) moveX(delta int) {
+	if delta > 0 {
+		if e.x >= len(e.lines[e.y]) {
+			if e.y < len(e.lines)-1 {
+				e.y++
+				e.x = 0
+			}
+		} else {
+			e.x++
+		}
+	} else {
+		if e.x <= 0 {
+			if e.y > 0 {
+				e.y--
+				e.x = len(e.lines[e.y])
+			}
+		} else {
+			e.x--
+		}
+	}
+}
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
 
+		log.Println(key, gc.KeyString(key))
+
 		updateLengthIndex := true
+		resetSelected := true
 		currentLine := e.lines[e.y]
 
 		switch key {
@@ -302,6 +326,7 @@ func (e *Editor) Run() error {
 				e.x = e.x + i
 			}
 		case 526: // CTRL + Down
+			e.printLinesIndex = utils.Min(e.printLinesIndex+1, len(e.lines))
 		case 546: // CTRL + Left
 			str := e.lines[e.y][:e.x]
 			i := strings.LastIndex(str, " ")
@@ -313,10 +338,12 @@ func (e *Editor) Run() error {
 				e.x = i + 1
 			}
 		case 567: // CTRL + Up
+			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
+		case 5: // CTRL + E
+
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
-			e.y--
-			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y, 0))
+			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
 			e.clampXToLineOrLengthIndex()
 		case 24: // CTRL + X
 			text := currentLine + "\n"
@@ -325,40 +352,38 @@ func (e *Editor) Run() error {
 			if err != nil {
 				panic(err)
 			}
+		case 337: // Shift+Up
+			e.moveY(-1)
+			updateLengthIndex = false
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedYEnd = e.x
+		case 402: // Shift+Right
+			e.moveX(1)
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedYEnd = e.x
+		case 336: // Shift+Down
+			e.moveY(1)
+			updateLengthIndex = false
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedYEnd = e.x
+		case 393: // Shift+Left
+			e.moveX(1)
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedYEnd = e.x
 		case gc.KEY_DOWN:
-			if e.y >= len(e.lines)-1 {
-				continue
-			}
-
-			e.y++
-			e.clampXToLineOrLengthIndex()
+			e.moveY(1)
 			updateLengthIndex = false
 		case gc.KEY_UP:
-			if e.y <= 0 {
-				continue
-			}
-
-			e.y--
-			e.clampXToLineOrLengthIndex()
+			e.moveY(-1)
 			updateLengthIndex = false
 		case gc.KEY_LEFT:
-			if e.x <= 0 {
-				if e.y > 0 {
-					e.y--
-					e.x = len(e.lines[e.y])
-				}
-			} else {
-				e.x--
-			}
+			e.moveX(-1)
 		case gc.KEY_RIGHT:
-			if e.x >= len(currentLine) {
-				if e.y < len(e.lines)-1 {
-					e.y++
-					e.x = 0
-				}
-			} else {
-				e.x++
-			}
+			e.moveX(1)
 		case gc.KEY_ENTER, gc.KEY_RETURN:
 			newLine := e.lines[e.y][:e.x]
 			e.lines[e.y] = e.lines[e.y][e.x:]
@@ -376,8 +401,8 @@ func (e *Editor) Run() error {
 			e.y++
 			e.x = 0
 		case gc.KEY_TAB:
-			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
-			e.x++
+			e.lines[e.y] = e.lines[e.y][:e.x] + "    " + e.lines[e.y][e.x:]
+			e.x += 4
 		case gc.KEY_END:
 			e.x = len(e.lines[e.y])
 		case gc.KEY_HOME:
@@ -413,6 +438,12 @@ func (e *Editor) Run() error {
 
 		if updateLengthIndex {
 			e.currLengthIndex = e.x
+		}
+		if resetSelected {
+			e.selectedXStart = e.x
+			e.selectedYStart = e.y
+			e.selectedXEnd = e.x
+			e.selectedYEnd = e.y
 		}
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
