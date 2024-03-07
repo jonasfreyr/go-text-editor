@@ -50,6 +50,20 @@ func (e *Editor) enableColor(color [3]int) {
 	colorIndex := e.colorMap[key]
 	e.stdscr.ColorOn(int16(colorIndex))
 }
+
+func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
+	if startX == endX && startY == endY {
+		return false
+	}
+
+	if startY < line && line < endY {
+		return true
+	}
+
+	return ((line >= startY && line <= endY) &&
+		(col >= startX && col <= endX))
+}
+
 func (e *Editor) draw(swap bool) {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
@@ -58,6 +72,13 @@ func (e *Editor) draw(swap bool) {
 	} else if e.x-4 < e.printLineStartIndex {
 		e.printLineStartIndex = utils.Max(e.x-4, 0)
 	}
+
+	selectedXStart := utils.Min(e.selectedXStart, e.selectedXEnd)
+	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
+	selectedXEnd := utils.Max(e.selectedXStart, e.selectedXEnd)
+	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
+
+	log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
 
 	err := gc.Cursor(0)
 	if err != nil {
@@ -104,10 +125,17 @@ func (e *Editor) draw(swap bool) {
 
 			e.enableColor(t.color)
 			// e.stdscr.Move(i, x)
-			for _, chr := range token {
-				e.stdscr.AttrOn(gc.A_REVERSE)
+			for index, chr := range token {
+				highlighted := false
+				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, i, x+index) {
+					highlighted = true
+					e.stdscr.AttrOn(gc.A_REVERSE)
+				}
 				e.stdscr.AddChar(gc.Char(chr))
-				e.stdscr.AttrOff(gc.A_REVERSE)
+
+				if highlighted {
+					e.stdscr.AttrOff(gc.A_REVERSE)
+				}
 			}
 			// e.stdscr.Print(token)
 			e.disableColor(t.color)
@@ -325,7 +353,7 @@ func (e *Editor) Run() error {
 			} else {
 				e.x = e.x + i
 			}
-		case 526: // CTRL + Down
+		case 526, 530: // CTRL + Down
 			e.printLinesIndex = utils.Min(e.printLinesIndex+1, len(e.lines))
 		case 546: // CTRL + Left
 			str := e.lines[e.y][:e.x]
@@ -337,7 +365,7 @@ func (e *Editor) Run() error {
 			} else {
 				e.x = i + 1
 			}
-		case 567: // CTRL + Up
+		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
 		case 5: // CTRL + E
 
@@ -357,23 +385,25 @@ func (e *Editor) Run() error {
 			updateLengthIndex = false
 			resetSelected = false
 			e.selectedYEnd = e.y
-			e.selectedYEnd = e.x
+			e.selectedXEnd = e.x
 		case 402: // Shift+Right
 			e.moveX(1)
 			resetSelected = false
 			e.selectedYEnd = e.y
-			e.selectedYEnd = e.x
+			e.selectedXEnd = e.x
 		case 336: // Shift+Down
 			e.moveY(1)
 			updateLengthIndex = false
 			resetSelected = false
 			e.selectedYEnd = e.y
-			e.selectedYEnd = e.x
+			e.selectedXEnd = e.x
+
+			// log.Println(e.selectedYEnd, e.selectedYEnd)
 		case 393: // Shift+Left
-			e.moveX(1)
+			e.moveX(-1)
 			resetSelected = false
 			e.selectedYEnd = e.y
-			e.selectedYEnd = e.x
+			e.selectedXEnd = e.x
 		case gc.KEY_DOWN:
 			e.moveY(1)
 			updateLengthIndex = false
