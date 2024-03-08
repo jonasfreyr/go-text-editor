@@ -3,7 +3,6 @@ import "fmt"
 /*
     This is a multiline comment
     Here's the proof
-
 */
 
 type Palli struct{

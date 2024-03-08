@@ -180,13 +180,13 @@ func (e *Editor) drawLineNumbers() {
 	start := e.printLinesIndex
 	e.lineNrscr.Erase()
 	e.enableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
-	for i := 0; i < e.maxY; i++ {
-		e.lineNrscr.MovePrint(i, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
+	for i := 1; i <= e.maxY; i++ {
+		e.lineNrscr.MovePrint(i-1, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
 	}
 	e.disableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
 	e.lineNrscr.Refresh()
 }
-func (e *Editor) draw(swap bool) {
+func (e *Editor) draw() {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
 	if e.x-e.printLineStartIndex > e.maxX-4 {
@@ -283,7 +283,7 @@ func (e *Editor) draw(swap bool) {
 
 	e.stdscr.Refresh()
 
-	if e.printLinesIndex <= e.y && e.y <= e.printLinesIndex+e.maxY {
+	if e.printLinesIndex <= e.y && e.y < e.printLinesIndex+e.maxY {
 		err = gc.Cursor(1)
 		if err != nil {
 			log.Println(err)
@@ -292,6 +292,49 @@ func (e *Editor) draw(swap bool) {
 }
 func (e *Editor) End() {
 	gc.End()
+}
+
+func (e *Editor) removeSelection() {
+	//selectedXStart := e.selectedXStart
+	//selectedXEnd := e.selectedXEnd
+	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
+	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
+	if selectedYStart == e.selectedYEnd { // Did the ends swap
+		//selectedXStart = e.selectedXEnd
+		//selectedXEnd = e.selectedXStart
+	}
+	if selectedYStart == selectedYEnd { // Are the ends the same
+		//selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
+		//selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
+	}
+
+	e.deleteLines(selectedYStart, selectedYEnd-selectedYStart)
+
+}
+func (e *Editor) remove() {
+	if e.selected != "" {
+		e.removeSelection()
+		return
+	}
+
+	if e.x == 0 {
+		if e.y == 0 {
+			return
+		}
+
+		line := e.lines[e.y]
+
+		e.x = len(e.lines[e.y-1])
+
+		e.lines[e.y-1] += line
+		e.lines = append(e.lines[:e.y], e.lines[e.y+1:]...)
+
+		e.y--
+		return
+	}
+
+	e.x--
+	e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+1:]
 }
 
 // This needs testing when it comes to multi line deletes
@@ -303,6 +346,8 @@ func (e *Editor) deleteLines(y, num int) {
 	} else {
 		e.lines = append(e.lines[:y], e.lines[y+num:]...)
 	}
+	e.y = y
+	e.clampXToLineOrLengthIndex()
 }
 func (e *Editor) clampXToLineOrLengthIndex() {
 	line := e.lines[e.y]
@@ -347,7 +392,7 @@ func (e *Editor) Load(filePath string) error {
 	e.y, e.x = e.stdscr.CursorYX()
 
 	before := time.Now()
-	e.draw(false)
+	e.draw()
 	dt := time.Since(before)
 	log.Println(dt)
 
@@ -479,6 +524,12 @@ func (e *Editor) Run() error {
 			resetSelected = false
 			e.selectedYEnd = e.y
 			e.selectedXEnd = e.x
+		case 536: // CTRL+Home
+			e.moveY(-e.y)
+			updateLengthIndex = false
+		case 531: // CTRL+END
+			e.moveY(len(e.lines) - e.y)
+			updateLengthIndex = false
 		case gc.KEY_DOWN:
 			e.moveY(1)
 			updateLengthIndex = false
@@ -513,24 +564,7 @@ func (e *Editor) Run() error {
 		case gc.KEY_HOME:
 			e.x = 0
 		case gc.KEY_BACKSPACE:
-			if e.x == 0 {
-				if e.y == 0 {
-					continue
-				}
-
-				line := e.lines[e.y]
-
-				e.x = len(e.lines[e.y-1])
-
-				e.lines[e.y-1] += line
-				e.lines = append(e.lines[:e.y], e.lines[e.y+1:]...)
-
-				e.y--
-
-			} else {
-				e.x--
-				e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+1:]
-			}
+			e.remove()
 		default:
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {
@@ -553,7 +587,7 @@ func (e *Editor) Run() error {
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
 
-		e.draw(true)
+		e.draw()
 	}
 }
 func (e *Editor) Save(filepath string) error {
