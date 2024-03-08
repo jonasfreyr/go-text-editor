@@ -23,6 +23,7 @@ type JSONConfig struct {
 	Types    TokensConfig `json:"types"`
 	Keywords TokensConfig `json:"keywords"`
 	Comment  TokensConfig `json:"comment"`
+	LineNr   ColorConfig  `json:"lineNr"`
 }
 
 func ReadConfig(path string) (*JSONConfig, error) {

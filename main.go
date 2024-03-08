@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,7 +14,8 @@ import (
 )
 
 type Editor struct {
-	stdscr *gc.Window
+	stdscr    *gc.Window
+	lineNrscr *gc.Window
 
 	maxX, maxY int
 
@@ -33,151 +35,33 @@ type Editor struct {
 	selectedXEnd, selectedYEnd     int
 }
 
-func tokenLineLength(tokens []Token) int {
-	l := 0
-	for _, token := range tokens {
-		l += token.Length()
-	}
-	return l
-}
-func (e *Editor) disableColor(color [3]int) {
-	key := utils.ColorToString(color)
-	colorIndex := e.colorMap[key]
-	e.stdscr.ColorOff(int16(colorIndex))
-}
-func (e *Editor) enableColor(color [3]int) {
-	key := utils.ColorToString(color)
-	colorIndex := e.colorMap[key]
-	e.stdscr.ColorOn(int16(colorIndex))
-}
+var colorIndex = 1
 
-func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
-	if startX == endX && startY == endY {
-		return false
-	}
-
-	if startY < line && line < endY {
-		return true
-	}
-
-	return ((line >= startY && line <= endY) &&
-		(col >= startX && col <= endX))
-}
-
-func (e *Editor) draw(swap bool) {
-	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
-
-	if e.x-e.printLineStartIndex > e.maxX-4 {
-		e.printLineStartIndex = e.x - e.maxX + 4
-	} else if e.x-4 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(e.x-4, 0)
-	}
-
-	selectedXStart := utils.Min(e.selectedXStart, e.selectedXEnd)
-	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
-	selectedXEnd := utils.Max(e.selectedXStart, e.selectedXEnd)
-	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
-
-	log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
-
-	err := gc.Cursor(0)
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = e.stdscr.Clear()
-	if err != nil {
-		log.Println(err)
-	}
-	for i, line := range tokens[e.printLinesIndex:] {
-		if i >= e.maxY {
-			break
-		}
-
-		if tokenLineLength(line) <= e.printLineStartIndex {
-			e.stdscr.Println()
-			continue
-		}
-
-		for _, t := range line {
-			x := t.location.col - 1 - e.printLineStartIndex
-			token := t.Token()
-
-			// Either skip or cut tokens that are not on screen to the left
-			if x < 0 {
-				if x+len(token) < 0 {
-					continue
-				}
-
-				token = token[-x:]
-				x = 0
-			}
-
-			// Either skip or cut tokens that are not on screen to the right
-			maxX := e.maxX - 1
-			if x+len(token) > maxX {
-				if x > maxX {
-					break
-				}
-
-				token = token[:maxX-x]
-			}
-
-			e.enableColor(t.color)
-			// e.stdscr.Move(i, x)
-			for index, chr := range token {
-				highlighted := false
-				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, i, x+index) {
-					highlighted = true
-					e.stdscr.AttrOn(gc.A_REVERSE)
-				}
-				e.stdscr.AddChar(gc.Char(chr))
-
-				if highlighted {
-					e.stdscr.AttrOff(gc.A_REVERSE)
-				}
-			}
-			// e.stdscr.Print(token)
-			e.disableColor(t.color)
-		}
-		e.stdscr.Println()
-
-	}
-
-	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
-
-	e.stdscr.Refresh()
-
-	if e.printLinesIndex <= e.y && e.y <= e.printLinesIndex+e.maxY {
-		err = gc.Cursor(1)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-}
-func (e *Editor) setColor(index int, color [3]int) error {
+func (e *Editor) setColor(color [3]int) error {
 	// log.Println("Setting color", index, color)
-	err := gc.InitColor(int16(index), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
+	err := gc.InitColor(int16(colorIndex), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
 	if err != nil {
 		return err
 	}
 
 	// fmt.Println("Setting pair")
-	err = gc.InitPair(int16(index), int16(index), -1)
+	err = gc.InitPair(int16(colorIndex), int16(colorIndex), -1)
 	if err != nil {
 		return err
 	}
 
 	key := utils.ColorToString(color)
-	e.colorMap[key] = index
+	e.colorMap[key] = colorIndex
+
+	colorIndex++
 
 	return nil
 }
 func (e *Editor) setColors() error {
 	e.colorMap = make(map[string]int)
-	for i, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color,
+	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.lexer.config.LineNr.Color,
 		e.lexer.config.Keywords.Color, e.lexer.config.Comment.Color, e.lexer.config.Digits.Color, e.lexer.config.Strings.Color, e.lexer.config.Default.Color} {
-		err := e.setColor(i+1, colorArray)
+		err := e.setColor(colorArray)
 		if err != nil {
 			return err
 		}
@@ -215,6 +99,18 @@ func (e *Editor) Init() {
 		log.Fatal("init", err)
 	}
 
+	e.maxY, e.maxX = e.stdscr.MaxYX()
+
+	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, 4)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	e.lineNrscr, err = gc.NewWindow(e.maxY, 4, 0, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	e.lexer = NewLexer()
 
 	err = e.initColor()
@@ -224,6 +120,7 @@ func (e *Editor) Init() {
 	}
 
 	gc.Echo(false)
+	gc.Raw(true) // Hell yeah
 	err = e.stdscr.Keypad(true)
 	if err != nil {
 		log.Fatal(err)
@@ -231,9 +128,158 @@ func (e *Editor) Init() {
 
 	gc.SetTabSize(4)
 
-	e.maxY, e.maxX = e.stdscr.MaxYX()
-
 	e.lines = make([]string, 1)
+}
+func tokenLineLength(tokens []Token) int {
+	l := 0
+	for _, token := range tokens {
+		l += token.Length()
+	}
+	return l
+}
+func (e *Editor) disableColor(scr *gc.Window, color [3]int) {
+	key := utils.ColorToString(color)
+	colorIndex := e.colorMap[key]
+	err := scr.ColorOff(int16(colorIndex))
+	if err != nil {
+		log.Println(err)
+	}
+}
+func (e *Editor) enableColor(scr *gc.Window, color [3]int) {
+	key := utils.ColorToString(color)
+	colorIndex := e.colorMap[key]
+	err := scr.ColorOn(int16(colorIndex))
+	if err != nil {
+		log.Println(err)
+	}
+}
+func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
+	if startX == endX && startY == endY {
+		return false
+	}
+
+	if startY < line && line < endY {
+		return true
+	}
+
+	if startY != endY {
+		if line == startY {
+			return col >= startX
+		} else if line == endY {
+			return col < endX
+		}
+		return false
+	}
+
+	return (line >= startY && line <= endY) && (col >= startX && col < endX)
+}
+func (e *Editor) drawLineNumbers() {
+	start := e.printLinesIndex
+	e.lineNrscr.Erase()
+	e.enableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
+	for i := 0; i < e.maxY; i++ {
+		e.lineNrscr.MovePrint(i, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
+	}
+	e.disableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
+	e.lineNrscr.Refresh()
+}
+func (e *Editor) draw(swap bool) {
+	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
+
+	if e.x-e.printLineStartIndex > e.maxX-4 {
+		e.printLineStartIndex = e.x - e.maxX + 4
+	} else if e.x-4 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(e.x-4, 0)
+	}
+
+	selectedXStart := e.selectedXStart
+	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
+	selectedXEnd := e.selectedXEnd
+	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
+	if selectedYStart == e.selectedYEnd {
+		selectedXStart = e.selectedXEnd
+		selectedXEnd = e.selectedXStart
+
+		if selectedYStart == selectedYEnd {
+			selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
+			selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
+		}
+	}
+
+	// log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
+
+	err := gc.Cursor(0)
+	if err != nil {
+		log.Println(err)
+	}
+
+	e.drawLineNumbers()
+	e.stdscr.Erase()
+	for i, line := range tokens[e.printLinesIndex:] {
+		if i >= e.maxY {
+			break
+		}
+
+		if tokenLineLength(line) <= e.printLineStartIndex {
+			e.stdscr.Println()
+			continue
+		}
+
+		for _, t := range line {
+			x := t.location.col - 1 - e.printLineStartIndex
+			token := t.Token()
+
+			// Either skip or cut tokens that are not on screen to the left
+			if x < 0 {
+				if x+len(token) < 0 {
+					continue
+				}
+
+				token = token[-x:]
+				x = 0
+			}
+
+			// Either skip or cut tokens that are not on screen to the right
+			maxX := e.maxX - 1
+			if x+len(token) > maxX {
+				if x > maxX {
+					break
+				}
+
+				token = token[:maxX-x]
+			}
+
+			e.enableColor(e.stdscr, t.color)
+			// e.stdscr.Move(i, x)
+			for index, chr := range token {
+				highlighted := false
+				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, t.location.line, x+index) {
+					highlighted = true
+					e.stdscr.AttrOn(gc.A_REVERSE)
+				}
+				e.stdscr.AddChar(gc.Char(chr))
+
+				if highlighted {
+					e.stdscr.AttrOff(gc.A_REVERSE)
+				}
+			}
+			// e.stdscr.Print(token)
+			e.disableColor(e.stdscr, t.color)
+		}
+		e.stdscr.Println()
+
+	}
+
+	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
+
+	e.stdscr.Refresh()
+
+	if e.printLinesIndex <= e.y && e.y <= e.printLinesIndex+e.maxY {
+		err = gc.Cursor(1)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 func (e *Editor) End() {
 	gc.End()
@@ -313,7 +359,7 @@ func (e *Editor) moveX(delta int) {
 	if delta > 0 {
 		if e.x >= len(e.lines[e.y]) {
 			if e.y < len(e.lines)-1 {
-				e.y++
+				e.moveY(1)
 				e.x = 0
 			}
 		} else {
@@ -322,7 +368,7 @@ func (e *Editor) moveX(delta int) {
 	} else {
 		if e.x <= 0 {
 			if e.y > 0 {
-				e.y--
+				e.moveY(-1)
 				e.x = len(e.lines[e.y])
 			}
 		} else {
@@ -373,6 +419,8 @@ func (e *Editor) Run() error {
 			e.deleteLines(e.y, 1)
 			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
 			e.clampXToLineOrLengthIndex()
+		case 3: // CTRL + C
+
 		case 24: // CTRL + X
 			text := currentLine + "\n"
 			err := clipboard.WriteAll(text)

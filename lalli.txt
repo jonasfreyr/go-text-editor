@@ -28,7 +28,7 @@ func (p *Palli) GetColor() [3]int{
 
 
 // Main function that will be run
-func main() int{
+func main() int{    
     var thing bool
     fmt.Println(len("I got color"))
 
