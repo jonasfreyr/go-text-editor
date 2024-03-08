@@ -33,6 +33,9 @@ type Editor struct {
 
 	selectedXStart, selectedYStart int
 	selectedXEnd, selectedYEnd     int
+	selected                       string
+
+	path string
 }
 
 var colorIndex = 1
@@ -193,17 +196,16 @@ func (e *Editor) draw(swap bool) {
 	}
 
 	selectedXStart := e.selectedXStart
-	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
 	selectedXEnd := e.selectedXEnd
+	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
 	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
-	if selectedYStart == e.selectedYEnd {
+	if selectedYStart == e.selectedYEnd { // Did the ends swap
 		selectedXStart = e.selectedXEnd
 		selectedXEnd = e.selectedXStart
-
-		if selectedYStart == selectedYEnd {
-			selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
-			selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
-		}
+	}
+	if selectedYStart == selectedYEnd { // Are the ends the same
+		selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
+		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
 	}
 
 	// log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
@@ -215,6 +217,8 @@ func (e *Editor) draw(swap bool) {
 
 	e.drawLineNumbers()
 	e.stdscr.Erase()
+	e.selected = ""
+	lastY := -1
 	for i, line := range tokens[e.printLinesIndex:] {
 		if i >= e.maxY {
 			break
@@ -256,6 +260,11 @@ func (e *Editor) draw(swap bool) {
 				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, t.location.line, x+index) {
 					highlighted = true
 					e.stdscr.AttrOn(gc.A_REVERSE)
+					if lastY != -1 && t.location.line != lastY {
+						e.selected += "\n"
+					}
+					e.selected += string(chr)
+					lastY = t.location.line
 				}
 				e.stdscr.AddChar(gc.Char(chr))
 
@@ -304,6 +313,8 @@ func (e *Editor) clampXToLineOrLengthIndex() {
 	}
 }
 func (e *Editor) Load(filePath string) error {
+	e.path = filePath
+
 	lines, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
@@ -420,13 +431,29 @@ func (e *Editor) Run() error {
 			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
 			e.clampXToLineOrLengthIndex()
 		case 3: // CTRL + C
+			text := e.selected
+			if e.selected == "" {
+				text = "\n" + currentLine
+			}
+			err := clipboard.WriteAll(text)
+			if err != nil {
+				panic(err)
+			}
 
 		case 24: // CTRL + X
-			text := currentLine + "\n"
+			if e.selected != "" {
+				break
+			}
+			text := "\n" + currentLine
 			err := clipboard.WriteAll(text)
 			e.deleteLines(e.y, 1)
 			if err != nil {
 				panic(err)
+			}
+		case 19: // CTRL + S
+			err := e.Save(e.path)
+			if err != nil {
+				log.Println(err)
 			}
 		case 337: // Shift+Up
 			e.moveY(-1)
@@ -565,10 +592,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if path != "" {
-		err := e.Save(path)
-		if err != nil {
-			panic(err)
-		}
-	}
+	//if path != "" {
+	//	err := e.Save(path)
+	//	if err != nil {
+	//		panic(err)
+	//	}
+	//}
 }
