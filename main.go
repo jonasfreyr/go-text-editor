@@ -295,28 +295,29 @@ func (e *Editor) End() {
 }
 
 func (e *Editor) removeSelection() {
-	//selectedXStart := e.selectedXStart
-	//selectedXEnd := e.selectedXEnd
+	selectedXStart := e.selectedXStart
+	selectedXEnd := e.selectedXEnd
 	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
 	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
 	if selectedYStart == e.selectedYEnd { // Did the ends swap
-		//selectedXStart = e.selectedXEnd
-		//selectedXEnd = e.selectedXStart
+		selectedXStart = e.selectedXEnd
+		selectedXEnd = e.selectedXStart
 	}
 	if selectedYStart == selectedYEnd { // Are the ends the same
-		//selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
-		//selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
-	}
-
-	e.deleteLines(selectedYStart, selectedYEnd-selectedYStart)
-
-}
-func (e *Editor) remove() {
-	if e.selected != "" {
-		e.removeSelection()
+		selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
+		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
+		e.lines[e.y] = e.lines[e.y][:selectedXStart] + e.lines[e.y][selectedXEnd:]
+		e.x = selectedXStart
 		return
 	}
 
+	// Please for the love of god fix this
+	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
+	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
+	e.y = selectedYStart
+	e.x = selectedXStart
+}
+func (e *Editor) remove(num int) {
 	if e.x == 0 {
 		if e.y == 0 {
 			return
@@ -327,14 +328,15 @@ func (e *Editor) remove() {
 		e.x = len(e.lines[e.y-1])
 
 		e.lines[e.y-1] += line
-		e.lines = append(e.lines[:e.y], e.lines[e.y+1:]...)
+
+		e.lines = append(e.lines[:e.y], e.lines[e.y+num:]...)
 
 		e.y--
 		return
 	}
 
-	e.x--
-	e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+1:]
+	e.x -= num
+	e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
 }
 
 // This needs testing when it comes to multi line deletes
@@ -346,7 +348,7 @@ func (e *Editor) deleteLines(y, num int) {
 	} else {
 		e.lines = append(e.lines[:y], e.lines[y+num:]...)
 	}
-	e.y = y
+	// e.y = y
 	e.clampXToLineOrLengthIndex()
 }
 func (e *Editor) clampXToLineOrLengthIndex() {
@@ -564,7 +566,12 @@ func (e *Editor) Run() error {
 		case gc.KEY_HOME:
 			e.x = 0
 		case gc.KEY_BACKSPACE:
-			e.remove()
+			if e.selected != "" {
+				e.removeSelection()
+				break
+			}
+
+			e.remove(1)
 		default:
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {

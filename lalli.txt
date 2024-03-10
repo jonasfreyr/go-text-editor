@@ -6,14 +6,13 @@ import "fmt"
 */
 
 type Palli struct{
-    x, y int
-    color [3]int
+    x, y   int
+    color: [3]int
 }
 
 func NewPalli() *Palli{
     return &Palli{
-        x: 0
-        y: 0
+        
     }
 }
 
