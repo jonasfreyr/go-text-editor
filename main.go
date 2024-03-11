@@ -259,6 +259,7 @@ func (e *Editor) draw() {
 				highlighted := false
 				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, t.location.line, x+index) {
 					highlighted = true
+					e.disableColor(e.stdscr, t.color)
 					e.stdscr.AttrOn(gc.A_REVERSE)
 					if lastY != -1 && t.location.line != lastY {
 						e.selected += "\n"
@@ -269,6 +270,7 @@ func (e *Editor) draw() {
 				e.stdscr.AddChar(gc.Char(chr))
 
 				if highlighted {
+					e.enableColor(e.stdscr, t.color)
 					e.stdscr.AttrOff(gc.A_REVERSE)
 				}
 			}
@@ -311,11 +313,14 @@ func (e *Editor) removeSelection() {
 		return
 	}
 
+	log.Println(selectedYStart, selectedXStart, selectedYEnd, selectedXEnd)
+	log.Println(e.lines[selectedYEnd])
+
 	// Please for the love of god fix this
+	e.moveY(selectedYStart - e.y) // e.y = selectedYStart
+	e.moveX(selectedXStart - e.x) // e.x = selectedXStart
 	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
-	e.y = selectedYStart
-	e.x = selectedXStart
 }
 func (e *Editor) remove(num int) {
 	if e.x == 0 {
@@ -346,7 +351,7 @@ func (e *Editor) deleteLines(y, num int) {
 	} else if len(e.lines) == 1 {
 		e.lines[y] = ""
 	} else {
-		e.lines = append(e.lines[:y], e.lines[y+num:]...)
+		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
 	}
 	// e.y = y
 	e.clampXToLineOrLengthIndex()
@@ -486,14 +491,29 @@ func (e *Editor) Run() error {
 			if err != nil {
 				panic(err)
 			}
+		case 1: // CTRL + A // TODO: needs fixing
+			e.selectedYStart = 0
+			e.selectedXStart = 0
+			e.selectedXEnd = len(e.lines[len(e.lines)-1])
+			e.selectedYEnd = len(e.lines) - 1
 
+			e.moveY(e.selectedYEnd - e.y)
+			e.moveX(e.selectedXEnd - e.x)
+			//e.x = e.selectedXEnd
+			//e.y = e.selectedYEnd
+			resetSelected = false
 		case 24: // CTRL + X
-			if e.selected != "" {
-				break
+			var text string
+			if e.selected == "" {
+				text = "\n" + currentLine
+				e.deleteLines(e.y, 1)
+			} else {
+				text = e.selected
+				e.removeSelection()
 			}
-			text := "\n" + currentLine
+
 			err := clipboard.WriteAll(text)
-			e.deleteLines(e.y, 1)
+
 			if err != nil {
 				panic(err)
 			}
@@ -558,7 +578,7 @@ func (e *Editor) Run() error {
 
 			e.y++
 			e.x = 0
-		case gc.KEY_TAB:
+		case gc.KEY_TAB: // TODO: do this properly
 			e.lines[e.y] = e.lines[e.y][:e.x] + "    " + e.lines[e.y][e.x:]
 			e.x += 4
 		case gc.KEY_END:
