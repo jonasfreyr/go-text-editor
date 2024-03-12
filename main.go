@@ -186,13 +186,26 @@ func (e *Editor) drawLineNumbers() {
 	e.disableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
 	e.lineNrscr.Refresh()
 }
+func (e *Editor) accountForTabs(x, y int) int {
+	newX := 0
+	for _, token := range e.lines[y][:x] {
+		if string(token) == "\t" {
+			newX += 4 - (newX % 4)
+		} else {
+			newX++
+		}
+	}
+	return newX
+}
 func (e *Editor) draw() {
 	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
-	if e.x-e.printLineStartIndex > e.maxX-4 {
-		e.printLineStartIndex = e.x - e.maxX + 4
-	} else if e.x-4 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(e.x-4, 0)
+	accountedForTabs := e.accountForTabs(e.x, e.y)
+
+	if accountedForTabs-e.printLineStartIndex > e.maxX-4 {
+		e.printLineStartIndex = accountedForTabs - e.maxX + 4
+	} else if accountedForTabs-4 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(accountedForTabs-4, 0)
 	}
 
 	selectedXStart := e.selectedXStart
@@ -281,7 +294,7 @@ func (e *Editor) draw() {
 
 	}
 
-	e.stdscr.Move(e.y-e.printLinesIndex, e.x-e.printLineStartIndex)
+	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
 	e.stdscr.Refresh()
 
@@ -386,9 +399,9 @@ func (e *Editor) Load(filePath string) error {
 			continue
 		}
 
-		if chr == "\t" {
-			chr = "    "
-		}
+		//if chr == "\t" {
+		//	chr = "    "
+		//}
 
 		text[lineNr] += chr
 
@@ -428,7 +441,7 @@ func (e *Editor) moveX(delta int) {
 			e.x += delta
 		}
 	} else {
-		if e.x < 0 {
+		if e.x <= 0 {
 			if e.y > 0 {
 				e.moveY(-1)
 				e.x = len(e.lines[e.y])
@@ -463,7 +476,6 @@ func (e *Editor) ctrlMoveRight() {
 		e.moveX(i)
 	}
 }
-
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
@@ -481,6 +493,7 @@ func (e *Editor) Run() error {
 			e.ctrlMoveRight()
 			resetSelected = false
 			e.selectedXEnd = e.x
+			e.selectedYEnd = e.y
 		case 561: // CTRL + Right
 			e.ctrlMoveRight()
 		case 526, 530: // CTRL + Down
@@ -489,6 +502,7 @@ func (e *Editor) Run() error {
 			e.ctrlMoveLeft()
 			resetSelected = false
 			e.selectedXEnd = e.x
+			e.selectedYEnd = e.y
 
 		case 546: // CTRL + Left
 			e.ctrlMoveLeft()
@@ -596,8 +610,8 @@ func (e *Editor) Run() error {
 			e.y++
 			e.x = 0
 		case gc.KEY_TAB: // TODO: do this properly
-			e.lines[e.y] = e.lines[e.y][:e.x] + "    " + e.lines[e.y][e.x:]
-			e.x += 4
+			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
+			e.moveX(1)
 		case gc.KEY_SEND:
 			e.x = len(e.lines[e.y])
 			resetSelected = false
