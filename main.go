@@ -456,13 +456,10 @@ func (e *Editor) ctrlMoveLeft() {
 	i := strings.LastIndex(str, " ")
 	if i == -1 {
 		e.moveX(-e.x)
-		// e.x = 0
 	} else if i == len(str)-1 {
 		e.moveX(-1)
-		// e.x--
 	} else {
 		e.moveX(i + 1 - e.x)
-		// e.x = i + 1
 	}
 }
 func (e *Editor) ctrlMoveRight() {
@@ -489,22 +486,22 @@ func (e *Editor) Run() error {
 		switch key {
 		case gc.KEY_ESC:
 			return nil
-		case 562: // CTRL + Shift + Right
+		case 562, 566: // CTRL + Shift + Right
 			e.ctrlMoveRight()
 			resetSelected = false
 			e.selectedXEnd = e.x
 			e.selectedYEnd = e.y
-		case 561: // CTRL + Right
+		case 561, 565: // CTRL + Right
 			e.ctrlMoveRight()
 		case 526, 530: // CTRL + Down
 			e.printLinesIndex = utils.Min(e.printLinesIndex+1, len(e.lines))
-		case 547: // CTRL + Shift + Left
+		case 547, 551: // CTRL + Shift + Left
 			e.ctrlMoveLeft()
 			resetSelected = false
 			e.selectedXEnd = e.x
 			e.selectedYEnd = e.y
 
-		case 546: // CTRL + Left
+		case 546, 550: // CTRL + Left
 			e.ctrlMoveLeft()
 		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
