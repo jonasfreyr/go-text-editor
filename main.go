@@ -295,7 +295,6 @@ func (e *Editor) draw() {
 func (e *Editor) End() {
 	gc.End()
 }
-
 func (e *Editor) removeSelection() {
 	selectedXStart := e.selectedXStart
 	selectedXEnd := e.selectedXEnd
@@ -426,19 +425,45 @@ func (e *Editor) moveX(delta int) {
 				e.x = 0
 			}
 		} else {
-			e.x++
+			e.x += delta
 		}
 	} else {
-		if e.x <= 0 {
+		if e.x < 0 {
 			if e.y > 0 {
 				e.moveY(-1)
 				e.x = len(e.lines[e.y])
 			}
 		} else {
-			e.x--
+			e.x += delta
 		}
 	}
 }
+func (e *Editor) ctrlMoveLeft() {
+	str := e.lines[e.y][:e.x]
+	i := strings.LastIndex(str, " ")
+	if i == -1 {
+		e.moveX(-e.x)
+		// e.x = 0
+	} else if i == len(str)-1 {
+		e.moveX(-1)
+		// e.x--
+	} else {
+		e.moveX(i + 1 - e.x)
+		// e.x = i + 1
+	}
+}
+func (e *Editor) ctrlMoveRight() {
+	str := e.lines[e.y][e.x:]
+	i := strings.Index(str, " ")
+	if i == -1 {
+		e.moveX(len(e.lines[e.y]) - e.x)
+	} else if i == 0 {
+		e.moveX(1)
+	} else {
+		e.moveX(i)
+	}
+}
+
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
@@ -452,31 +477,23 @@ func (e *Editor) Run() error {
 		switch key {
 		case gc.KEY_ESC:
 			return nil
+		case 562: // CTRL + Shift + Right
+			e.ctrlMoveRight()
+			resetSelected = false
+			e.selectedXEnd = e.x
 		case 561: // CTRL + Right
-			str := e.lines[e.y][e.x:]
-			i := strings.Index(str, " ")
-			if i == -1 {
-				e.x = len(e.lines[e.y])
-			} else if i == 0 {
-				e.x++
-			} else {
-				e.x = e.x + i
-			}
+			e.ctrlMoveRight()
 		case 526, 530: // CTRL + Down
 			e.printLinesIndex = utils.Min(e.printLinesIndex+1, len(e.lines))
+		case 547: // CTRL + Shift + Left
+			e.ctrlMoveLeft()
+			resetSelected = false
+			e.selectedXEnd = e.x
+
 		case 546: // CTRL + Left
-			str := e.lines[e.y][:e.x]
-			i := strings.LastIndex(str, " ")
-			if i == -1 {
-				e.x = 0
-			} else if i == len(str)-1 {
-				e.x--
-			} else {
-				e.x = i + 1
-			}
+			e.ctrlMoveLeft()
 		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
-		case 5: // CTRL + E
 
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
@@ -491,7 +508,7 @@ func (e *Editor) Run() error {
 			if err != nil {
 				panic(err)
 			}
-		case 1: // CTRL + A // TODO: needs fixing
+		case 1: // CTRL + A
 			e.selectedYStart = 0
 			e.selectedXStart = 0
 			e.selectedXEnd = len(e.lines[len(e.lines)-1])
@@ -581,8 +598,16 @@ func (e *Editor) Run() error {
 		case gc.KEY_TAB: // TODO: do this properly
 			e.lines[e.y] = e.lines[e.y][:e.x] + "    " + e.lines[e.y][e.x:]
 			e.x += 4
+		case gc.KEY_SEND:
+			e.x = len(e.lines[e.y])
+			resetSelected = false
+			e.selectedXEnd = e.x
 		case gc.KEY_END:
 			e.x = len(e.lines[e.y])
+		case gc.KEY_SHOME:
+			e.x = 0
+			resetSelected = false
+			e.selectedXEnd = e.x
 		case gc.KEY_HOME:
 			e.x = 0
 		case gc.KEY_BACKSPACE:
