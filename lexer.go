@@ -21,7 +21,7 @@ type Token struct {
 
 func (t *Token) Length() int {
 	if t.lexeme == "\n" {
-		return 4
+		return 4 - (t.location.col)%4
 	}
 
 	return len(t.lexeme)
@@ -59,9 +59,13 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 	newLexemes := strings.Split(token.lexeme, "\n")
 
 	for i, lexeme := range newLexemes {
+		col := 0
+		if i == 0 {
+			col = token.location.col
+		}
 		newLoc := Location{
 			line: token.location.line + i,
-			col:  1,
+			col:  col,
 		}
 
 		newTokens = append(newTokens, l.newToken(lexeme, token.color, newLoc))
@@ -111,6 +115,18 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 	return tokens
 }
 
+//func (e *Lexer) accountForTabs(x, y int) int {
+//	newX := 0
+//	for _, token := range e.lines[y][:x] {
+//		if string(token) == "\t" {
+//			newX += 4 - (newX % 4)
+//		} else {
+//			newX++
+//		}
+//	}
+//	return newX
+//}
+
 func (l *Lexer) read() {
 	if l.eof {
 		l.ch = ""
@@ -118,7 +134,14 @@ func (l *Lexer) read() {
 
 	if l.ch == "\n" {
 		l.line++
-		l.col = 1
+		l.col = 0
+	} else if l.ch == "\t" {
+		remainder := 4 - (l.col)%4
+		//if remainder == 0 {
+		//	remainder = 4
+		//}
+		l.col += remainder
+
 	} else {
 		l.col++
 	}
@@ -128,7 +151,7 @@ func (l *Lexer) read() {
 
 	if errors.Is(err, io.EOF) {
 		l.line++
-		l.col = 1
+		l.col = 0
 		l.ch = "\n"
 		l.eof = true
 	} else if err != nil {

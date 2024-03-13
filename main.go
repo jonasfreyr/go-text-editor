@@ -202,23 +202,26 @@ func (e *Editor) draw() {
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
-	if accountedForTabs-e.printLineStartIndex > e.maxX-4 {
-		e.printLineStartIndex = accountedForTabs - e.maxX + 4
-	} else if accountedForTabs-4 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(accountedForTabs-4, 0)
+	// TODO: Don't know why it is 8 instead of 4
+	if accountedForTabs-e.printLineStartIndex > e.maxX-8 {
+		e.printLineStartIndex = accountedForTabs - e.maxX + 8
+	} else if accountedForTabs-8 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(accountedForTabs-8, 0)
 	}
 
-	selectedXStart := e.selectedXStart
-	selectedXEnd := e.selectedXEnd
+	selectedXStart := e.accountForTabs(e.selectedXStart, e.selectedYStart)
+	selectedXEnd := e.accountForTabs(e.selectedXEnd, e.selectedYEnd)
 	selectedYStart := utils.Min(e.selectedYStart, e.selectedYEnd)
 	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
 	if selectedYStart == e.selectedYEnd { // Did the ends swap
-		selectedXStart = e.selectedXEnd
-		selectedXEnd = e.selectedXStart
+		selectedXStart, selectedXEnd = selectedXEnd, selectedXStart
+		//selectedXStart = e.selectedXEnd
+		//selectedXEnd = e.selectedXStart
 	}
 	if selectedYStart == selectedYEnd { // Are the ends the same
-		selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
-		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
+		tempStart, tempEnd := selectedXStart, selectedXEnd
+		selectedXStart = utils.Min(tempStart, tempEnd)
+		selectedXEnd = utils.Max(tempStart, tempEnd)
 	}
 
 	// log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
@@ -237,13 +240,13 @@ func (e *Editor) draw() {
 			break
 		}
 
-		if tokenLineLength(line) <= e.printLineStartIndex {
+		if len(line) == 0 || line[len(line)-1].location.col+line[len(line)-1].Length() <= e.printLineStartIndex {
 			e.stdscr.Println()
 			continue
 		}
 
 		for _, t := range line {
-			x := t.location.col - 1 - e.printLineStartIndex
+			x := t.location.col - e.printLineStartIndex
 			token := t.Token()
 
 			// Either skip or cut tokens that are not on screen to the left
@@ -267,7 +270,7 @@ func (e *Editor) draw() {
 			}
 
 			e.enableColor(e.stdscr, t.color)
-			// e.stdscr.Move(i, x)
+			e.stdscr.Move(i, x)
 			for index, chr := range token {
 				highlighted := false
 				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, t.location.line, x+index) {
