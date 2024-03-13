@@ -2,10 +2,11 @@ package main
 
 import (
 	"errors"
-	"github.com/jonasfreyr/playground/utils"
 	"io"
 	"strings"
 	"unicode"
+
+	"github.com/jonasfreyr/playground/utils"
 )
 
 type Location struct {
@@ -120,7 +121,7 @@ func (l *Lexer) Reset() {
 	l.eof = false
 	l.ch = ""
 	l.line = 0
-	l.col = 0
+	l.col = -1
 }
 
 func (l *Lexer) Tokenize(text string) [][]Token {
@@ -157,7 +158,6 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 
 	return tokens
 }
-
 func (l *Lexer) read() {
 	if l.eof {
 		l.ch = ""
@@ -188,7 +188,6 @@ func (l *Lexer) read() {
 		l.ch = string(newChar)
 	}
 }
-
 func (l *Lexer) newToken(ch string, color [3]int, loc Location) Token {
 	return Token{
 		color:    color,
@@ -196,7 +195,6 @@ func (l *Lexer) newToken(ch string, color [3]int, loc Location) Token {
 		location: loc,
 	}
 }
-
 func (l *Lexer) next() Token {
 	loc := Location{
 		line: l.line,

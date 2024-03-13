@@ -395,10 +395,6 @@ func (e *Editor) Load(filePath string) error {
 			continue
 		}
 
-		//if chr == "\t" {
-		//	chr = "    "
-		//}
-
 		text[lineNr] += chr
 
 	}
@@ -450,11 +446,13 @@ func (e *Editor) moveX(delta int) {
 func (e *Editor) ctrlMoveLeft() {
 	str := e.lines[e.y][:e.x]
 	i := strings.LastIndex(str, " ")
-	if i == -1 {
+	i2 := strings.LastIndex(str, "\t")
+
+	if i == -1 && i2 == -1 {
 		e.moveX(-e.x)
-	} else if i == len(str)-1 {
+	} else if i == len(str)-1 || i2 == len(str)-1 {
 		e.moveX(-1)
-	} else {
+	} else { // TODO: stuff here
 		e.moveX(i + 1 - e.x)
 	}
 }
@@ -685,10 +683,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	//if path != "" {
-	//	err := e.Save(path)
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//}
 }
