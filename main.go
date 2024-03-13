@@ -38,6 +38,8 @@ type Editor struct {
 	path string
 }
 
+const TabWidth = 4
+
 var colorIndex = 1
 
 func (e *Editor) setColor(color [3]int) error {
@@ -129,16 +131,9 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	gc.SetTabSize(4)
+	gc.SetTabSize(TabWidth)
 
 	e.lines = make([]string, 1)
-}
-func tokenLineLength(tokens []Token) int {
-	l := 0
-	for _, token := range tokens {
-		l += token.Length()
-	}
-	return l
 }
 func (e *Editor) disableColor(scr *gc.Window, color [3]int) {
 	key := utils.ColorToString(color)
@@ -190,7 +185,7 @@ func (e *Editor) accountForTabs(x, y int) int {
 	newX := 0
 	for _, token := range e.lines[y][:x] {
 		if string(token) == "\t" {
-			newX += 4 - (newX % 4)
+			newX += TabWidth - (newX % TabWidth)
 		} else {
 			newX++
 		}
@@ -203,10 +198,10 @@ func (e *Editor) draw() {
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
 	// TODO: Don't know why it is 8 instead of 4
-	if accountedForTabs-e.printLineStartIndex > e.maxX-8 {
-		e.printLineStartIndex = accountedForTabs - e.maxX + 8
-	} else if accountedForTabs-8 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(accountedForTabs-8, 0)
+	if accountedForTabs-e.printLineStartIndex > e.maxX-TabWidth*2 {
+		e.printLineStartIndex = accountedForTabs - e.maxX + TabWidth*2
+	} else if accountedForTabs-TabWidth*2 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(accountedForTabs-TabWidth*2, 0)
 	}
 
 	selectedXStart := e.accountForTabs(e.selectedXStart, e.selectedYStart)
@@ -215,8 +210,6 @@ func (e *Editor) draw() {
 	selectedYEnd := utils.Max(e.selectedYStart, e.selectedYEnd)
 	if selectedYStart == e.selectedYEnd { // Did the ends swap
 		selectedXStart, selectedXEnd = selectedXEnd, selectedXStart
-		//selectedXStart = e.selectedXEnd
-		//selectedXEnd = e.selectedXStart
 	}
 	if selectedYStart == selectedYEnd { // Are the ends the same
 		tempStart, tempEnd := selectedXStart, selectedXEnd
@@ -427,10 +420,10 @@ func (e *Editor) moveY(delta int) {
 
 	e.clampXToLineOrLengthIndex()
 
-	if e.y-e.printLinesIndex > e.maxY-4 {
-		e.printLinesIndex = e.y - e.maxY + 4
-	} else if e.y-4 < e.printLinesIndex {
-		e.printLinesIndex = utils.Max(e.y-4, 0)
+	if e.y-e.printLinesIndex > e.maxY-TabWidth {
+		e.printLinesIndex = e.y - e.maxY + TabWidth
+	} else if e.y-TabWidth < e.printLinesIndex {
+		e.printLinesIndex = utils.Max(e.y-TabWidth, 0)
 	}
 }
 func (e *Editor) moveX(delta int) {

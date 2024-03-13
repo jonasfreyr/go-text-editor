@@ -21,7 +21,7 @@ type Token struct {
 
 func (t *Token) Length() int {
 	if t.lexeme == "\n" {
-		return 4 - (t.location.col)%4
+		return TabWidth - (t.location.col)%TabWidth
 	}
 
 	return len(t.lexeme)
@@ -63,6 +63,49 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 		if i == 0 {
 			col = token.location.col
 		}
+
+		// God, this feels like a lot of work for a simple thing
+		// But hey, it works
+		if strings.Contains(lexeme, "\t") {
+			lastLoc := col
+			newLexeme := ""
+			for _, tok := range lexeme {
+				if string(tok) == "\t" {
+					if newLexeme != "" {
+						// The Lexeme
+						newLoc := Location{
+							line: token.location.line + i,
+							col:  lastLoc,
+						}
+						newTokens = append(newTokens, l.newToken(newLexeme, token.color, newLoc))
+					}
+
+					// Tab
+					lastLoc = lastLoc + len(newLexeme)
+					newLoc := Location{
+						line: token.location.line + i,
+						col:  lastLoc,
+					}
+					newTokens = append(newTokens, l.newToken("\t", token.color, newLoc))
+					lastLoc += TabWidth - (lastLoc % TabWidth)
+					newLexeme = ""
+
+				} else {
+					newLexeme += string(tok)
+				}
+			}
+			if newLexeme != "" {
+				// The Lexeme
+				newLoc := Location{
+					line: token.location.line + i,
+					col:  lastLoc,
+				}
+				newTokens = append(newTokens, l.newToken(newLexeme, token.color, newLoc))
+			}
+
+			continue
+		}
+
 		newLoc := Location{
 			line: token.location.line + i,
 			col:  col,
@@ -100,12 +143,12 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 			newTokens := l.splitMultilineToken(token)
 
 			for _, token := range newTokens {
+				lineIndex = token.location.line
 				tokens[lineIndex] = append(tokens[lineIndex], token)
 
-				lineIndex++
 				tokens = append(tokens, make([]Token, 0))
 			}
-			lineIndex--
+			// lineIndex--
 			continue
 		}
 
@@ -114,18 +157,6 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 
 	return tokens
 }
-
-//func (e *Lexer) accountForTabs(x, y int) int {
-//	newX := 0
-//	for _, token := range e.lines[y][:x] {
-//		if string(token) == "\t" {
-//			newX += 4 - (newX % 4)
-//		} else {
-//			newX++
-//		}
-//	}
-//	return newX
-//}
 
 func (l *Lexer) read() {
 	if l.eof {
@@ -136,11 +167,7 @@ func (l *Lexer) read() {
 		l.line++
 		l.col = 0
 	} else if l.ch == "\t" {
-		remainder := 4 - (l.col)%4
-		//if remainder == 0 {
-		//	remainder = 4
-		//}
-		l.col += remainder
+		l.col += TabWidth - (l.col)%TabWidth
 
 	} else {
 		l.col++
