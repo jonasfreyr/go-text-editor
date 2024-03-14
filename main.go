@@ -443,17 +443,32 @@ func (e *Editor) moveX(delta int) {
 		}
 	}
 }
+
+func getTokenIndexByX(tokens []Token, x int) int {
+	index := -1
+	for i, token := range tokens {
+		if token.location.col >= x && token.location.col+token.Length() <= x {
+			index = i
+			break
+		}
+	}
+	return index
+}
+
 func (e *Editor) ctrlMoveLeft() {
 	str := e.lines[e.y][:e.x]
-	i := strings.LastIndex(str, " ")
-	i2 := strings.LastIndex(str, "\t")
+	tonkens := e.lexer.Tokenize(str)
+	log.Println(len(tonkens))
+	i := getTokenIndexByX(tonkens[0], e.x)
 
-	if i == -1 && i2 == -1 {
+	if i == -1 {
 		e.moveX(-e.x)
-	} else if i == len(str)-1 || i2 == len(str)-1 {
-		e.moveX(-1)
-	} else { // TODO: stuff here
-		e.moveX(i + 1 - e.x)
+	} else {
+		if tonkens[0][i].location.col == e.x && i != 0 {
+			e.moveX(tonkens[0][i-1].location.col + tonkens[0][i-1].Length() - e.x)
+		} else {
+			e.moveX(tonkens[0][i].location.col - e.x)
+		}
 	}
 }
 func (e *Editor) ctrlMoveRight() {
