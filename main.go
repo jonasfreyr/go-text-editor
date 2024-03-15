@@ -36,12 +36,33 @@ type Editor struct {
 	selected                       string
 
 	path string
+
+	debug    bool
+	debugscr *gc.Window
 }
 
 const TabWidth = 4
 
 var colorIndex = 1
 
+func (e *Editor) debugLog(args ...any) {
+	if !e.debug {
+		return
+	}
+
+	y, _ := e.debugscr.CursorYX()
+	if y >= e.maxY {
+		e.debugscr.Scroll(y - (e.maxY))
+	}
+	for i, arg := range args {
+		if i > 0 {
+			e.debugscr.Print(" ")
+		}
+		e.debugscr.Print(arg)
+	}
+	e.debugscr.Println()
+	e.debugscr.Refresh()
+}
 func (e *Editor) setColor(color [3]int) error {
 	// log.Println("Setting color", index, color)
 	err := gc.InitColor(int16(colorIndex), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
@@ -95,9 +116,8 @@ func (e *Editor) initColor() error {
 	}
 	return nil
 }
-func (e *Editor) Init() {
+func (e *Editor) Init(debug bool) {
 	var err error
-	//e.stdscr, err = NewDoubleBufferWindow()
 	e.stdscr, err = gc.Init()
 
 	if err != nil {
@@ -105,10 +125,26 @@ func (e *Editor) Init() {
 	}
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
+	e.debug = debug
+	if debug {
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX/2, 0, 4)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, 4)
-	if err != nil {
-		log.Fatal(err)
+		e.debugscr, err = gc.NewWindow(e.maxY, e.maxX/2, 0, e.maxX/2+4)
+		e.debugscr.ScrollOk(true)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		e.maxY, e.maxX = e.stdscr.MaxYX()
+
+	} else {
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, 4)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	e.lineNrscr, err = gc.NewWindow(e.maxY, 4, 0, 0)
@@ -132,6 +168,15 @@ func (e *Editor) Init() {
 	}
 
 	gc.SetTabSize(TabWidth)
+
+	//go func() {
+	//	count := 0
+	//	for {
+	//		time.Sleep(time.Millisecond * 200)
+	//		e.debugLog(fmt.Sprintf("test-%d", count))
+	//		count++
+	//	}
+	//}()
 
 	e.lines = make([]string, 1)
 }
@@ -444,42 +489,45 @@ func (e *Editor) moveX(delta int) {
 	}
 }
 
-func getTokenIndexByX(tokens []Token, x int) int {
+func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	index := -1
 	for i, token := range tokens {
-		if token.location.col >= x && token.location.col+token.Length() <= x {
+		e.debugLog("X:", x, "token:", token.location.col, "tokenSize:", token.location.col+token.Length())
+		if token.location.col <= x && token.location.col+token.Length() >= x {
 			index = i
+			e.debugLog("found")
 			break
 		}
 	}
+	e.debugLog("returning", index)
 	return index
 }
 
 func (e *Editor) ctrlMoveLeft() {
 	str := e.lines[e.y][:e.x]
 	tonkens := e.lexer.Tokenize(str)
-	log.Println(len(tonkens))
-	i := getTokenIndexByX(tonkens[0], e.x)
+	i := e.getTokenIndexByX(tonkens[0], e.x)
 
 	if i == -1 {
-		e.moveX(-e.x)
+		return
+	}
+	if tonkens[0][i].location.col == e.x && i != 0 {
+		e.moveX(tonkens[0][i-1].location.col + tonkens[0][i-1].Length() - e.x)
 	} else {
-		if tonkens[0][i].location.col == e.x && i != 0 {
-			e.moveX(tonkens[0][i-1].location.col + tonkens[0][i-1].Length() - e.x)
-		} else {
-			e.moveX(tonkens[0][i].location.col - e.x)
-		}
+		e.moveX(tonkens[0][i].location.col - e.x)
 	}
 }
 func (e *Editor) ctrlMoveRight() {
 	str := e.lines[e.y][e.x:]
-	i := strings.Index(str, " ")
+	tonkens := e.lexer.Tokenize(str)
+	i := e.getTokenIndexByX(tonkens[0], e.x)
 	if i == -1 {
-		e.moveX(len(e.lines[e.y]) - e.x)
-	} else if i == 0 {
-		e.moveX(1)
+		return
+	}
+	if tonkens[0][i].location.col == e.x && i != len(tonkens[0])-1 {
+		e.moveX(tonkens[0][i+1].location.col + tonkens[0][i+1].Length() - e.x)
 	} else {
-		e.moveX(i)
+		e.moveX(tonkens[0][i].location.col + tonkens[0][i].Length() - e.x)
 	}
 }
 func (e *Editor) Run() error {
@@ -677,9 +725,13 @@ func main() {
 	}
 
 	path := os.Args[1]
+	debug := false
+	if len(os.Args) >= 3 && os.Args[2] == "--debug" {
+		debug = true
+	}
 
 	e := &Editor{}
-	e.Init()
+	e.Init(debug)
 	defer e.End()
 
 	f, err := os.Create("logs.txt")
