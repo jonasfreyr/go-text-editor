@@ -500,37 +500,62 @@ func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 		}
 	}
 	e.debugLog("returning", index)
+	e.debugLog("--------------------")
 	return index
 }
 
 func (e *Editor) ctrlMoveLeft() {
-	str := e.lines[e.y][:e.x]
+	str := e.lines[e.y]
 	tonkens := e.lexer.Tokenize(str)
-	i := e.getTokenIndexByX(tonkens[0], e.x)
 
+	x := e.accountForTabs(e.x, e.y)
+	i := e.getTokenIndexByX(tonkens[0], x)
 	if i == -1 {
 		return
 	}
-	if tonkens[0][i].location.col == e.x && i != 0 {
-		e.moveX(tonkens[0][i-1].location.col + tonkens[0][i-1].Length() - e.x)
+
+	tonken := tonkens[0][i]
+
+	if tonken.location.col == x && i != 0 {
+		prevTonken := tonkens[0][i-1]
+		e.moveX(prevTonken.location.col + prevTonken.Length() - x)
 	} else {
-		e.moveX(tonkens[0][i].location.col - e.x)
+		e.moveX(tonken.location.col - x)
 	}
 }
 func (e *Editor) ctrlMoveRight() {
-	str := e.lines[e.y][e.x:]
+	str := e.lines[e.y]
 	tonkens := e.lexer.Tokenize(str)
-	i := e.getTokenIndexByX(tonkens[0], e.x)
+
+	x := e.accountForTabs(e.x, e.y)
+	i := e.getTokenIndexByX(tonkens[0], x)
 	if i == -1 {
 		return
 	}
-	if tonkens[0][i].location.col == e.x && i != len(tonkens[0])-1 {
-		e.moveX(tonkens[0][i+1].location.col + tonkens[0][i+1].Length() - e.x)
+
+	tonken := tonkens[0][i]
+	if tonken.location.col+tonken.Length() == x && i != len(tonkens[0])-1 {
+		nextTonken := tonkens[0][i+1]
+		e.debugLog("next: ", nextTonken.location.col)
+		e.moveX(nextTonken.location.col + nextTonken.Length() - x)
 	} else {
-		e.moveX(tonkens[0][i].location.col + tonkens[0][i].Length() - e.x)
+		e.moveX(tonken.location.col + tonken.Length() - x)
 	}
 }
 func (e *Editor) Run() error {
+	for {
+		err := e.run()
+
+		if err != nil {
+			e.debugLog(err)
+
+		} else {
+			return nil
+		}
+	}
+}
+
+func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
 
