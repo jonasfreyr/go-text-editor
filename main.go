@@ -54,13 +54,18 @@ func (e *Editor) debugLog(args ...any) {
 	if y >= e.maxY {
 		e.debugscr.Scroll(y - (e.maxY))
 	}
+
+	logString := ""
 	for i, arg := range args {
 		if i > 0 {
 			e.debugscr.Print(" ")
+			logString += " "
 		}
 		e.debugscr.Print(arg)
+		logString += fmt.Sprint(arg)
 	}
 	e.debugscr.Println()
+	log.Println(logString)
 	e.debugscr.Refresh()
 }
 func (e *Editor) setColor(color [3]int) error {
@@ -522,6 +527,8 @@ func (e *Editor) ctrlMoveLeft() {
 	} else {
 		e.moveX(tonken.location.col - x)
 	}
+
+	e.debugLog("x:", e.x)
 }
 func (e *Editor) ctrlMoveRight() {
 	str := e.lines[e.y]
@@ -559,7 +566,7 @@ func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		log.Println(key, gc.KeyString(key))
+		// log.Println(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
