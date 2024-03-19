@@ -401,8 +401,6 @@ func (e *Editor) remove(num int) {
 	e.x -= num
 	e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
 }
-
-// This needs testing when it comes to multi line deletes
 func (e *Editor) deleteLines(y, num int) {
 	if len(e.lines) <= 0 {
 		return
@@ -416,11 +414,32 @@ func (e *Editor) deleteLines(y, num int) {
 }
 func (e *Editor) clampXToLineOrLengthIndex() {
 	line := e.lines[e.y]
-	if e.currLengthIndex > len(line) {
-		e.x = len(line)
-	} else {
-		e.x = e.currLengthIndex
+	tokens := e.lexer.Tokenize(line)[0]
+	x := e.accountForTabs(e.x, e.y)
+
+	rel := 0
+	var index int = -1
+	var token Token
+	for index, token = range tokens {
+		if x >= token.location.col && x <= token.location.col+token.Length() {
+			rel = x - token.location.col
+			break
+		}
 	}
+
+	if index == -1 {
+		e.x = len(line)
+		return
+	}
+
+	token = unAccountForTabs(tokens)[index]
+	e.x = token.location.col + rel
+
+	//if e.currLengthIndex > len(line) {
+	//	e.x = len(line)
+	//} else {
+	//	e.x = e.currLengthIndex
+	//}
 }
 func (e *Editor) Load(filePath string) error {
 	e.path = filePath
