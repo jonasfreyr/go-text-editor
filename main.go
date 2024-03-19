@@ -493,7 +493,6 @@ func (e *Editor) moveX(delta int) {
 		}
 	}
 }
-
 func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	index := -1
 	for i, token := range tokens {
@@ -508,45 +507,98 @@ func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	e.debugLog("--------------------")
 	return index
 }
+func filterSpacesAndTabs(tokens []Token) []Token {
+	newTokens := make([]Token, 0)
+	for _, token := range tokens {
+		if token.lexeme != " " && token.lexeme != "\t" {
+			newTokens = append(newTokens, token)
+		}
+	}
+	return newTokens
+}
+
+func unAccountForTabs(tokens []Token) []Token {
+	newTokens := make([]Token, 0)
+	x := 0
+	for _, token := range tokens {
+		tok := Token{
+			location: Location{
+				line: token.location.line,
+				col:  x,
+			},
+			lexeme: token.lexeme,
+		}
+		x += len(token.lexeme)
+		newTokens = append(newTokens, tok)
+	}
+
+	return newTokens
+}
 
 func (e *Editor) ctrlMoveLeft() {
-	str := e.lines[e.y]
-	tonkens := e.lexer.Tokenize(str)
-
-	x := e.accountForTabs(e.x, e.y)
-	i := e.getTokenIndexByX(tonkens[0], x)
-	if i == -1 {
+	if e.x == 0 {
 		return
 	}
 
-	tonken := tonkens[0][i]
+	str := e.lines[e.y]
+	tonkens := e.lexer.Tokenize(str)[0]
+	tonkens = unAccountForTabs(tonkens)
+	tonkens = filterSpacesAndTabs(tonkens)
 
-	if tonken.location.col == x && i != 0 {
-		prevTonken := tonkens[0][i-1]
-		e.moveX(prevTonken.location.col + prevTonken.Length() - x)
+	i := e.getTokenIndexByX(tonkens, e.x)
+
+	var tonken Token
+	if i == -1 {
+		tonken = tonkens[len(tonkens)-1]
+
 	} else {
-		e.moveX(tonken.location.col - x)
+		tonken = tonkens[i]
+	}
+
+	if tonken.location.col == e.x {
+		if i == 0 {
+			e.moveX(-e.x)
+		} else {
+			prevTonken := tonkens[i-1]
+			e.moveX(prevTonken.location.col - e.x)
+		}
+		e.debugLog("iffy")
+
+	} else {
+		e.moveX(tonken.location.col - e.x)
+		e.debugLog("normal")
 	}
 
 	e.debugLog("x:", e.x)
+	e.x = utils.Max(e.x, 0)
 }
 func (e *Editor) ctrlMoveRight() {
 	str := e.lines[e.y]
-	tonkens := e.lexer.Tokenize(str)
 
-	x := e.accountForTabs(e.x, e.y)
-	i := e.getTokenIndexByX(tonkens[0], x)
-	if i == -1 {
+	if len(str) == 0 {
 		return
 	}
 
-	tonken := tonkens[0][i]
-	if tonken.location.col+tonken.Length() == x && i != len(tonkens[0])-1 {
-		nextTonken := tonkens[0][i+1]
-		e.debugLog("next: ", nextTonken.location.col)
-		e.moveX(nextTonken.location.col + nextTonken.Length() - x)
+	tonkens := e.lexer.Tokenize(str)[0]
+	tonkens = unAccountForTabs(tonkens)
+	tonkens = filterSpacesAndTabs(tonkens)
+
+	i := e.getTokenIndexByX(tonkens, e.x)
+
+	var tonken Token
+	if i == -1 {
+		tonken = tonkens[0]
+
 	} else {
-		e.moveX(tonken.location.col + tonken.Length() - x)
+		tonken = tonkens[i]
+	}
+
+	if tonken.location.col+tonken.Length() == e.x && i != len(tonkens)-1 {
+		nextTonken := tonkens[i+1]
+		e.debugLog("next: ", nextTonken.location.col)
+		e.moveX(nextTonken.location.col + nextTonken.Length() - e.x)
+	} else {
+		e.moveX(tonken.location.col + tonken.Length() - e.x)
 	}
 }
 func (e *Editor) Run() error {
@@ -695,7 +747,7 @@ func (e *Editor) run() error {
 
 			e.y++
 			e.x = 0
-		case gc.KEY_TAB: // TODO: do this properly
+		case gc.KEY_TAB:
 			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
 			e.moveX(1)
 		case gc.KEY_SEND:
