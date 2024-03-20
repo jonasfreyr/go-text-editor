@@ -22,7 +22,7 @@ type Editor struct {
 	x, y int
 	visX int
 
-	currLengthIndex int
+	inlinePosition int
 
 	printLineStartIndex int
 	printLinesIndex     int
@@ -39,6 +39,8 @@ type Editor struct {
 
 	debug    bool
 	debugscr *gc.Window
+
+	miniWindow *MiniWindow
 }
 
 const TabWidth = 4
@@ -132,12 +134,12 @@ func (e *Editor) Init(debug bool) {
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 	e.debug = debug
 	if debug {
-		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX/2, 0, 4)
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 0, 4)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		e.debugscr, err = gc.NewWindow(e.maxY, e.maxX/2, 0, e.maxX/2+4)
+		e.debugscr, err = gc.NewWindow(e.maxY, e.maxX*3/5-4, 0, e.maxX*3/5+4)
 		e.debugscr.ScrollOk(true)
 		if err != nil {
 			log.Fatal(err)
@@ -166,7 +168,9 @@ func (e *Editor) Init(debug bool) {
 	}
 
 	gc.Echo(false)
-	gc.Raw(true) // Hell yeah
+	gc.Raw(true)       // Hell yeah
+	gc.SetEscDelay(10) // Watch out for this
+
 	err = e.stdscr.Keypad(true)
 	if err != nil {
 		log.Fatal(err)
@@ -182,6 +186,21 @@ func (e *Editor) Init(debug bool) {
 	//		count++
 	//	}
 	//}()
+
+	mw, err := gc.NewWindow(1, e.maxX, e.maxY-1, 4)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = mw.Keypad(true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	e.miniWindow = &MiniWindow{
+		width:  e.maxX,
+		stdscr: mw,
+	}
 
 	e.lines = make([]string, 1)
 }
@@ -410,15 +429,15 @@ func (e *Editor) deleteLines(y, num int) {
 		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
 	}
 	// e.y = y
-	e.clampXToLineOrLengthIndex()
+	e.clampX()
 }
-func (e *Editor) clampXToLineOrLengthIndex() {
+func (e *Editor) clampX() {
 	line := e.lines[e.y]
 
-	if e.currLengthIndex > len(line) {
+	if e.inlinePosition > len(line) {
 		e.x = len(line)
 	} else {
-		e.x = e.currLengthIndex
+		e.x = e.inlinePosition
 	}
 }
 func (e *Editor) Load(filePath string) error {
@@ -456,14 +475,14 @@ func (e *Editor) Load(filePath string) error {
 	dt := time.Since(before)
 	log.Println(dt)
 
-	e.currLengthIndex = e.x
+	e.inlinePosition = e.x
 
 	return nil
 }
 func (e *Editor) moveY(delta int) {
 	e.y = utils.Min(utils.Max(e.y+delta, 0), len(e.lines)-1)
 
-	e.clampXToLineOrLengthIndex()
+	e.clampX()
 
 	if e.y-e.printLinesIndex > e.maxY-TabWidth {
 		e.printLinesIndex = e.y - e.maxY + TabWidth
@@ -611,7 +630,7 @@ func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		// log.Println(key, gc.KeyString(key))
+		e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -639,11 +658,13 @@ func (e *Editor) run() error {
 			e.ctrlMoveLeft()
 		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
-
+		case 6: // CTRL + F
+			str := e.miniWindow.run(true)
+			e.debugLog(str)
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
 			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
-			e.clampXToLineOrLengthIndex()
+			e.clampX()
 		case 3: // CTRL + C
 			text := e.selected
 			if e.selected == "" {
@@ -773,7 +794,7 @@ func (e *Editor) run() error {
 		}
 
 		if updateLengthIndex {
-			e.currLengthIndex = e.x
+			e.inlinePosition = e.x
 		}
 		if resetSelected {
 			e.selectedXStart = e.x
