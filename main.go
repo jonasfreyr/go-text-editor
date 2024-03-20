@@ -316,7 +316,7 @@ func (e *Editor) draw() {
 			e.stdscr.Move(i, x)
 			for index, chr := range token {
 				highlighted := false
-				if e.isSelected(selectedXStart, selectedXEnd, selectedYStart, selectedYEnd, t.location.line, x+index) {
+				if e.isSelected(selectedXStart-e.printLineStartIndex, selectedXEnd-e.printLineStartIndex, selectedYStart, selectedYEnd, t.location.line, x+index) {
 					highlighted = true
 					e.disableColor(e.stdscr, t.color)
 					e.stdscr.AttrOn(gc.A_REVERSE)
@@ -414,32 +414,12 @@ func (e *Editor) deleteLines(y, num int) {
 }
 func (e *Editor) clampXToLineOrLengthIndex() {
 	line := e.lines[e.y]
-	tokens := e.lexer.Tokenize(line)[0]
-	x := e.accountForTabs(e.x, e.y)
 
-	rel := 0
-	var index int = -1
-	var token Token
-	for index, token = range tokens {
-		if x >= token.location.col && x <= token.location.col+token.Length() {
-			rel = x - token.location.col
-			break
-		}
-	}
-
-	if index == -1 {
+	if e.currLengthIndex > len(line) {
 		e.x = len(line)
-		return
+	} else {
+		e.x = e.currLengthIndex
 	}
-
-	token = unAccountForTabs(tokens)[index]
-	e.x = token.location.col + rel
-
-	//if e.currLengthIndex > len(line) {
-	//	e.x = len(line)
-	//} else {
-	//	e.x = e.currLengthIndex
-	//}
 }
 func (e *Editor) Load(filePath string) error {
 	e.path = filePath
@@ -535,7 +515,6 @@ func filterSpacesAndTabs(tokens []Token) []Token {
 	}
 	return newTokens
 }
-
 func unAccountForTabs(tokens []Token) []Token {
 	newTokens := make([]Token, 0)
 	x := 0
@@ -553,7 +532,6 @@ func unAccountForTabs(tokens []Token) []Token {
 
 	return newTokens
 }
-
 func (e *Editor) ctrlMoveLeft() {
 	if e.x == 0 {
 		return
@@ -581,14 +559,11 @@ func (e *Editor) ctrlMoveLeft() {
 			prevTonken := tonkens[i-1]
 			e.moveX(prevTonken.location.col - e.x)
 		}
-		e.debugLog("iffy")
 
 	} else {
 		e.moveX(tonken.location.col - e.x)
-		e.debugLog("normal")
 	}
 
-	e.debugLog("x:", e.x)
 	e.x = utils.Max(e.x, 0)
 }
 func (e *Editor) ctrlMoveRight() {
@@ -632,7 +607,6 @@ func (e *Editor) Run() error {
 		}
 	}
 }
-
 func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
