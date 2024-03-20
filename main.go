@@ -511,6 +511,12 @@ func (e *Editor) moveX(delta int) {
 		}
 	}
 }
+func (e *Editor) moveXto(x int) {
+	e.moveY(x - e.x)
+}
+func (e *Editor) moveYto(y int) {
+	e.moveY(y - e.y)
+}
 func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	index := -1
 	for i, token := range tokens {
@@ -614,6 +620,16 @@ func (e *Editor) ctrlMoveRight() {
 		e.moveX(tonken.location.col + tonken.Length() - e.x)
 	}
 }
+func (e *Editor) find(text string) {
+	for lineNr, line := range e.lines {
+		if index := strings.Index(line, text); index != -1 {
+			e.debugLog("y, x", index, lineNr)
+			e.moveYto(lineNr)
+			e.moveXto(index)
+			return
+		}
+	}
+}
 func (e *Editor) Run() error {
 	for {
 		err := e.run()
@@ -660,7 +676,14 @@ func (e *Editor) run() error {
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
 		case 6: // CTRL + F
 			str := e.miniWindow.run(true)
-			e.debugLog(str)
+			e.find(str)
+			e.debugLog("x is:", e.x)
+			resetSelected = false
+			e.selectedXStart = e.x
+			e.selectedYStart = e.y
+			e.selectedXEnd = e.x + len(str)
+			e.selectedYEnd = e.y
+
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
 			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
