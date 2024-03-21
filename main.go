@@ -200,6 +200,7 @@ func (e *Editor) Init(debug bool) {
 	e.miniWindow = &MiniWindow{
 		width:  e.maxX,
 		stdscr: mw,
+		texts:  make(map[string]string),
 	}
 
 	e.lines = make([]string, 1)
@@ -448,6 +449,10 @@ func (e *Editor) Load(filePath string) error {
 		return err
 	}
 
+	e.moveXto(0)
+	e.moveYto(0)
+	e.selectedXStart, e.selectedYStart, e.selectedXEnd, e.selectedYEnd = 0, 0, 0, 0
+
 	text := make([]string, 1)
 	lineNr := 0
 	for _, r := range lines {
@@ -468,12 +473,10 @@ func (e *Editor) Load(filePath string) error {
 	}
 	e.lines = text
 
-	e.y, e.x = e.stdscr.CursorYX()
-
 	before := time.Now()
 	e.draw()
 	dt := time.Since(before)
-	log.Println(dt)
+	e.debugLog(dt)
 
 	e.inlinePosition = e.x
 
@@ -512,7 +515,7 @@ func (e *Editor) moveX(delta int) {
 	}
 }
 func (e *Editor) moveXto(x int) {
-	e.moveY(x - e.x)
+	e.moveX(x - e.x)
 }
 func (e *Editor) moveYto(y int) {
 	e.moveY(y - e.y)
@@ -620,15 +623,22 @@ func (e *Editor) ctrlMoveRight() {
 		e.moveX(tonken.location.col + tonken.Length() - e.x)
 	}
 }
-func (e *Editor) find(text string) {
-	for lineNr, line := range e.lines {
-		if index := strings.Index(line, text); index != -1 {
-			e.debugLog("y, x", index, lineNr)
-			e.moveYto(lineNr)
-			e.moveXto(index)
-			return
+func (e *Editor) find(text string) (int, int) {
+	text = strings.ToLower(text)
+	for lineNr, line := range e.lines[e.y:] {
+		line = strings.ToLower(line)
+		if index := strings.Index(line, text); index != -1 && lineNr != 0 {
+			return e.y + lineNr, index
 		}
 	}
+	for lineNr, line := range e.lines[:e.y+1] {
+		line = strings.ToLower(line)
+		if index := strings.Index(line, text); index != -1 {
+			return lineNr, index
+		}
+	}
+
+	return -1, -1
 }
 func (e *Editor) Run() error {
 	for {
@@ -664,6 +674,7 @@ func (e *Editor) run() error {
 			e.ctrlMoveRight()
 		case 526, 530: // CTRL + Down
 			e.printLinesIndex = utils.Min(e.printLinesIndex+1, len(e.lines))
+			resetSelected = false
 		case 547, 551: // CTRL + Shift + Left
 			e.ctrlMoveLeft()
 			resetSelected = false
@@ -674,15 +685,45 @@ func (e *Editor) run() error {
 			e.ctrlMoveLeft()
 		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
-		case 6: // CTRL + F
-			str := e.miniWindow.run(true)
-			e.find(str)
-			e.debugLog("x is:", e.x)
 			resetSelected = false
-			e.selectedXStart = e.x
-			e.selectedYStart = e.y
-			e.selectedXEnd = e.x + len(str)
-			e.selectedYEnd = e.y
+		case 7: // CTRL + G
+			str := e.miniWindow.run(true, "goto")
+			lineNr, err := strconv.Atoi(str)
+			if err != nil {
+				break
+			}
+
+			e.moveXto(0)
+			e.inlinePosition = 0
+			e.moveYto(lineNr - 1)
+
+		case 6: // CTRL + F
+			for {
+				str := e.miniWindow.run(false, "find")
+				if str == "" {
+					break
+				}
+
+				y, x := e.find(str)
+				if y == -1 || x == -1 {
+					continue
+				}
+
+				e.debugLog("y, x", y, x)
+				e.moveYto(y)
+				e.moveXto(x)
+
+				e.debugLog("after move y, x", e.y, e.x)
+
+				e.debugLog("x is:", e.x)
+				resetSelected = false
+				e.selectedXStart = e.x
+				e.selectedYStart = e.y
+				e.selectedXEnd = e.x + len(str)
+				e.selectedYEnd = e.y
+
+				e.draw()
+			}
 
 		case 4: // CTRL + D
 			e.deleteLines(e.y, 1)
@@ -723,6 +764,16 @@ func (e *Editor) run() error {
 			if err != nil {
 				panic(err)
 			}
+		case 15: // CTRL + O
+			str := e.miniWindow.run(false, "open")
+			if str == "" {
+				break
+			}
+			err := e.Load(str)
+			if err != nil {
+				break
+			}
+
 		case 19: // CTRL + S
 			err := e.Save(e.path)
 			if err != nil {

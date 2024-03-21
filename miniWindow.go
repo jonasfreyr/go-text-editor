@@ -6,48 +6,53 @@ import (
 )
 
 type MiniWindow struct {
-	text  string
 	x     int
 	width int
 
 	stdscr *gc.Window
+
+	texts map[string]string
 }
 
-func (w *MiniWindow) draw() {
+func (w *MiniWindow) draw(label string) {
 	w.stdscr.Erase()
 	// w.stdscr.Border(gc.ACS_VLINE, gc.ACS_VLINE, gc.ACS_HLINE, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS)
-	w.stdscr.Print(w.text)
-	w.stdscr.Move(0, w.x)
+	w.stdscr.Print(label+":", w.texts[label])
+	w.stdscr.Move(0, len(label)+1+w.x)
 }
 
-func (w *MiniWindow) moveX(delta int) {
-	w.x = utils.Max(utils.Min(w.x+delta, len(w.text)), 0)
+func (w *MiniWindow) moveX(delta int, label string) {
+	w.x = utils.Max(utils.Min(w.x+delta, len(w.texts[label])), 0)
 }
 
-func (w *MiniWindow) run(clear bool) string {
-	if clear {
-		w.text = ""
-		w.x = 0
+func (w *MiniWindow) run(clear bool, label string) string {
+	if _, ok := w.texts[label]; !ok {
+		w.texts[label] = ""
 	}
-	w.draw()
+
+	if clear {
+		w.texts[label] = ""
+	}
+	w.x = len(w.texts[label])
+	w.draw(label)
 
 	for {
-		key := w.stdscr.GetChar()
+		k := w.stdscr.GetChar()
 
-		switch key {
-		case gc.KEY_ESC:
+		switch k {
+		case gc.KEY_ESC, gc.KEY_DOWN, gc.KEY_UP:
 			return ""
 		case gc.KEY_LEFT:
-			w.moveX(-1)
+			w.moveX(-1, label)
 		case gc.KEY_RIGHT:
-			w.moveX(1)
+			w.moveX(1, label)
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			return w.text
+			return w.texts[label]
 		case gc.KEY_TAB:
-			w.text = w.text[:w.x] + "\t" + w.text[w.x:]
-			w.moveX(1)
+			w.texts[label] = w.texts[label][:w.x] + "\t" + w.texts[label][w.x:]
+			w.moveX(1, label)
 		case gc.KEY_END:
-			w.x = len(w.text)
+			w.x = len(w.texts[label])
 		case gc.KEY_HOME:
 			w.x = 0
 		case gc.KEY_BACKSPACE:
@@ -55,18 +60,18 @@ func (w *MiniWindow) run(clear bool) string {
 				continue
 			}
 			// e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
-			w.moveX(-1)
-			w.text = w.text[:w.x] + w.text[w.x+1:]
+			w.moveX(-1, label)
+			w.texts[label] = w.texts[label][:w.x] + w.texts[label][w.x+1:]
 		default:
-			chr := gc.KeyString(key)
+			chr := gc.KeyString(k)
 			if len(chr) > 1 {
 				continue
 			}
 
-			w.text = w.text[:w.x] + chr + w.text[w.x:]
+			w.texts[label] = w.texts[label][:w.x] + chr + w.texts[label][w.x:]
 			w.x++
 		}
 
-		w.draw()
+		w.draw(label)
 	}
 }
