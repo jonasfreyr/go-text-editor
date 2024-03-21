@@ -41,6 +41,8 @@ type Editor struct {
 	debugscr *gc.Window
 
 	miniWindow *MiniWindow
+
+	transactions []Transaction
 }
 
 const TabWidth = 4
@@ -277,8 +279,6 @@ func (e *Editor) accountForTabs(x, y int) int {
 }
 func (e *Editor) draw() {
 	before := time.Now()
-	tokens := e.lexer.Tokenize(strings.Join(e.lines[:e.printLinesIndex+e.maxY], "\n"))
-	// tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
@@ -302,17 +302,13 @@ func (e *Editor) draw() {
 		selectedXEnd = utils.Max(tempStart, tempEnd)
 	}
 
-	// log.Println(selectedXStart, selectedYStart, selectedXEnd, selectedXEnd)
-
-	err := gc.Cursor(0)
-	if err != nil {
-		log.Println(err)
-	}
-
 	e.drawLineNumbers()
 	e.stdscr.Erase()
 	e.selected = ""
 	lastY := -1
+
+	tokens := e.lexer.Tokenize(strings.Join(e.lines[:utils.Min(e.printLinesIndex+e.maxY, len(e.lines))], "\n"))
+
 	for i, line := range tokens[e.printLinesIndex:] {
 		if i >= e.maxY {
 			break
@@ -378,12 +374,6 @@ func (e *Editor) draw() {
 
 	e.stdscr.Refresh()
 
-	if e.printLinesIndex <= e.y && e.y < e.printLinesIndex+e.maxY {
-		err = gc.Cursor(1)
-		if err != nil {
-			log.Println(err)
-		}
-	}
 	dt := time.Since(before)
 	e.debugLog("draw time:", dt)
 }
@@ -411,8 +401,8 @@ func (e *Editor) removeSelection() {
 	log.Println(e.lines[selectedYEnd])
 
 	// Please for the love of god fix this
-	e.moveY(selectedYStart - e.y) // e.y = selectedYStart
-	e.moveX(selectedXStart - e.x) // e.x = selectedXStart
+	e.moveYto(selectedYStart) // e.y = selectedYStart
+	e.moveXto(selectedXStart) // e.x = selectedXStart
 	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 }
@@ -464,10 +454,11 @@ func (e *Editor) Load(filePath string) error {
 	if err != nil {
 		return err
 	}
+	e.selectedXStart, e.selectedYStart, e.selectedXEnd, e.selectedYEnd = 0, 0, 0, 0
+	e.inlinePosition = 0
 
 	e.moveXto(0)
 	e.moveYto(0)
-	e.selectedXStart, e.selectedYStart, e.selectedXEnd, e.selectedYEnd = 0, 0, 0, 0
 
 	text := make([]string, 1)
 	lineNr := 0
@@ -489,12 +480,7 @@ func (e *Editor) Load(filePath string) error {
 	}
 	e.lines = text
 
-	before := time.Now()
 	e.draw()
-	dt := time.Since(before)
-	e.debugLog(dt)
-
-	e.inlinePosition = e.x
 
 	return nil
 }
@@ -696,7 +682,6 @@ func (e *Editor) run() error {
 			resetSelected = false
 			e.selectedXEnd = e.x
 			e.selectedYEnd = e.y
-
 		case 546, 550: // CTRL + Left
 			e.ctrlMoveLeft()
 		case 567, 571: // CTRL + Up
@@ -712,7 +697,6 @@ func (e *Editor) run() error {
 			e.moveXto(0)
 			e.inlinePosition = 0
 			e.moveYto(lineNr - 1)
-
 		case 6: // CTRL + F
 			for {
 				str := e.miniWindow.run(false, "find")
@@ -740,11 +724,17 @@ func (e *Editor) run() error {
 
 				e.draw()
 			}
+		case 1: // CTRL + A
+			e.selectedYStart = 0
+			e.selectedXStart = 0
+			e.selectedXEnd = len(e.lines[len(e.lines)-1])
+			e.selectedYEnd = len(e.lines) - 1
 
-		case 4: // CTRL + D
-			e.deleteLines(e.y, 1)
-			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
-			e.clampX()
+			e.moveYto(e.selectedYEnd)
+			e.moveXto(e.selectedXEnd)
+			//e.x = e.selectedXEnd
+			//e.y = e.selectedYEnd
+			resetSelected = false
 		case 3: // CTRL + C
 			text := e.selected
 			if e.selected == "" {
@@ -754,17 +744,26 @@ func (e *Editor) run() error {
 			if err != nil {
 				panic(err)
 			}
-		case 1: // CTRL + A
-			e.selectedYStart = 0
-			e.selectedXStart = 0
-			e.selectedXEnd = len(e.lines[len(e.lines)-1])
-			e.selectedYEnd = len(e.lines) - 1
-
-			e.moveY(e.selectedYEnd - e.y)
-			e.moveX(e.selectedXEnd - e.x)
-			//e.x = e.selectedXEnd
-			//e.y = e.selectedYEnd
-			resetSelected = false
+		case 4: // CTRL + D
+			e.deleteLines(e.y, 1)
+			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
+			e.clampX()
+		case 15: // CTRL + O
+			str := e.miniWindow.run(false, "open")
+			if str == "" {
+				break
+			}
+			err := e.Load(str)
+			if err != nil {
+				break
+			}
+		case 19: // CTRL + S
+			err := e.Save(e.path)
+			if err != nil {
+				log.Println(err)
+			}
+		case 26: // CTRL + Z
+			// TODO: do the stuff
 		case 24: // CTRL + X
 			var text string
 			if e.selected == "" {
@@ -780,32 +779,6 @@ func (e *Editor) run() error {
 			if err != nil {
 				panic(err)
 			}
-		case 15: // CTRL + O
-			str := e.miniWindow.run(false, "open")
-			if str == "" {
-				break
-			}
-			err := e.Load(str)
-			if err != nil {
-				break
-			}
-
-		case 19: // CTRL + S
-			err := e.Save(e.path)
-			if err != nil {
-				log.Println(err)
-			}
-		case 337: // Shift+Up
-			e.moveY(-1)
-			updateLengthIndex = false
-			resetSelected = false
-			e.selectedYEnd = e.y
-			e.selectedXEnd = e.x
-		case 402: // Shift+Right
-			e.moveX(1)
-			resetSelected = false
-			e.selectedYEnd = e.y
-			e.selectedXEnd = e.x
 		case 336: // Shift+Down
 			e.moveY(1)
 			updateLengthIndex = false
@@ -814,16 +787,27 @@ func (e *Editor) run() error {
 			e.selectedXEnd = e.x
 
 			// log.Println(e.selectedYEnd, e.selectedYEnd)
+		case 337: // Shift+Up
+			e.moveY(-1)
+			updateLengthIndex = false
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedXEnd = e.x
 		case 393: // Shift+Left
 			e.moveX(-1)
 			resetSelected = false
 			e.selectedYEnd = e.y
 			e.selectedXEnd = e.x
-		case 536: // CTRL+Home
-			e.moveY(-e.y)
-			updateLengthIndex = false
+		case 402: // Shift+Right
+			e.moveX(1)
+			resetSelected = false
+			e.selectedYEnd = e.y
+			e.selectedXEnd = e.x
 		case 531: // CTRL+END
 			e.moveY(len(e.lines) - e.y)
+			updateLengthIndex = false
+		case 536: // CTRL+Home
+			e.moveY(-e.y)
 			updateLengthIndex = false
 		case gc.KEY_DOWN:
 			e.moveY(1)
