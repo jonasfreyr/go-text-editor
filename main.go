@@ -52,6 +52,11 @@ func (e *Editor) debugLog(args ...any) {
 		return
 	}
 
+	err := gc.Cursor(0)
+	if err != nil {
+		log.Println(err)
+	}
+
 	y, _ := e.debugscr.CursorYX()
 	if y >= e.maxY {
 		e.debugscr.Scroll(y - (e.maxY))
@@ -69,6 +74,14 @@ func (e *Editor) debugLog(args ...any) {
 	e.debugscr.Println()
 	log.Println(logString)
 	e.debugscr.Refresh()
+
+	accountedForTabs := e.accountForTabs(e.x, e.y)
+	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
+
+	err = gc.Cursor(1)
+	if err != nil {
+		log.Println(err)
+	}
 }
 func (e *Editor) setColor(color [3]int) error {
 	// log.Println("Setting color", index, color)
@@ -263,7 +276,9 @@ func (e *Editor) accountForTabs(x, y int) int {
 	return newX
 }
 func (e *Editor) draw() {
-	tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
+	before := time.Now()
+	tokens := e.lexer.Tokenize(strings.Join(e.lines[:e.printLinesIndex+e.maxY], "\n"))
+	// tokens := e.lexer.Tokenize(strings.Join(e.lines, "\n"))
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
@@ -359,7 +374,6 @@ func (e *Editor) draw() {
 		e.stdscr.Println()
 
 	}
-
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
 	e.stdscr.Refresh()
@@ -370,6 +384,8 @@ func (e *Editor) draw() {
 			log.Println(err)
 		}
 	}
+	dt := time.Since(before)
+	e.debugLog("draw time:", dt)
 }
 func (e *Editor) End() {
 	gc.End()
