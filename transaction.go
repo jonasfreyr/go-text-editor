@@ -5,6 +5,7 @@ type Action int
 const (
 	INSERT Action = iota
 	DELETE
+	DELETE_LINE
 )
 
 type Transaction struct {

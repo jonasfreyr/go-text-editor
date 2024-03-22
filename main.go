@@ -54,6 +54,8 @@ func (e *Editor) debugLog(args ...any) {
 		return
 	}
 
+	// e.debugscr.Border(gc.ACS_VLINE, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS)
+
 	err := gc.Cursor(0)
 	if err != nil {
 		log.Println(err)
@@ -302,6 +304,11 @@ func (e *Editor) draw() {
 		selectedXEnd = utils.Max(tempStart, tempEnd)
 	}
 
+	err := gc.Cursor(0)
+	if err != nil {
+		e.debugLog(err)
+	}
+
 	e.drawLineNumbers()
 	e.stdscr.Erase()
 	e.selected = ""
@@ -372,6 +379,13 @@ func (e *Editor) draw() {
 	}
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
+	if e.printLinesIndex <= e.y && e.y < e.printLinesIndex+e.maxY {
+		err = gc.Cursor(1)
+		if err != nil {
+			e.debugLog(err)
+		}
+	}
+
 	e.stdscr.Refresh()
 
 	dt := time.Since(before)
@@ -392,50 +406,142 @@ func (e *Editor) removeSelection() {
 	if selectedYStart == selectedYEnd { // Are the ends the same
 		selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
 		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
-		e.lines[e.y] = e.lines[e.y][:selectedXStart] + e.lines[e.y][selectedXEnd:]
+		e.remove(selectedYStart, selectedXEnd, selectedXEnd-selectedXStart)
+		// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYStart][selectedXEnd:]
 		e.x = selectedXStart
 		return
 	}
 
-	log.Println(selectedYStart, selectedXStart, selectedYEnd, selectedXEnd)
-	log.Println(e.lines[selectedYEnd])
-
-	// Please for the love of god fix this
-	e.moveYto(selectedYStart) // e.y = selectedYStart
-	e.moveXto(selectedXStart) // e.x = selectedXStart
+	// TODO: Think how you are going to encode this into an Transaction for undo
+	// TODO: There is some weird behaviour when startX is on the beginning of the line
 	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
+	e.moveYto(selectedYStart) // e.y = selectedYStart
+	e.moveXto(selectedXStart) // e.x = selectedXStart
 }
-func (e *Editor) remove(num int) {
-	if e.x == 0 {
-		if e.y == 0 {
+
+// Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
+// If you desire to remove multiple lines use deleteLines
+func (e *Editor) remove(y, x, num int) {
+	// TODO: will needs some fixing to work with nums larger than 1
+	if x == 0 {
+		if y == 0 {
 			return
 		}
 
-		line := e.lines[e.y]
+		line := e.lines[y]
 
-		e.x = len(e.lines[e.y-1])
+		e.lines[y-1] += line
 
-		e.lines[e.y-1] += line
-
-		e.lines = append(e.lines[:e.y], e.lines[e.y+num:]...)
-
-		e.y--
+		e.deleteLines(y, 1)
 		return
 	}
 
-	e.x -= num
-	e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
+	x -= num
+
+	ta := Transaction{
+		location: Location{
+			line: y,
+			col:  x,
+		},
+		action: DELETE,
+		text:   e.lines[y][x : x+num],
+	}
+	e.addTransaction(ta)
+
+	e.lines[y] = e.lines[y][:x] + e.lines[y][x+num:]
+}
+func (e *Editor) insert(y, x int, text string) {
+	if y < 0 {
+		y = 0
+	} else if y > len(e.lines) {
+		y = len(e.lines)
+	}
+
+	if x < 0 {
+		x = 0
+	} else if x > len(e.lines[y]) {
+		x = len(e.lines[y])
+	}
+
+	e.lines[y] = e.lines[y][:x] + text + e.lines[y][x:]
+}
+
+func (e *Editor) addTransaction(transaction Transaction) {
+	e.transactions = append(e.transactions, transaction)
+	if len(e.transactions) >= 100 {
+		// TODO: I think? Needs testing
+		e.transactions = e.transactions[len(e.transactions)-100:]
+	}
+}
+func (e *Editor) undoTransaction() {
+	before := time.Now()
+	defer e.debugLog("undo took:", time.Since(before))
+
+	if len(e.transactions) == 0 {
+		return
+	}
+
+	ta := e.transactions[len(e.transactions)-1]
+	e.transactions = e.transactions[:len(e.transactions)-1]
+
+	e.debugLog(len(e.transactions))
+
+	switch ta.action {
+	case DELETE_LINE:
+		lines := strings.Split(ta.text, "\n")
+		e.addLines(ta.location.line, lines)
+	case DELETE:
+		e.insert(ta.location.line, ta.location.col, ta.text)
+
+	}
+	e.moveYto(ta.location.line)
+	e.moveXto(ta.location.col)
+}
+func (e *Editor) addLines(y int, lines []string) {
+	e.debugLog("lines:", len(e.lines))
+
+	// e.lines = slices.Insert(e.lines, y, lines...)
+	newList := make([]string, len(e.lines)+len(lines))
+	copy(newList, e.lines[:y])
+	for i := 0; i < len(lines); i++ {
+		newList[y+i] = lines[i]
+	}
+	rest := e.lines[y:]
+	for i := 0; i < len(rest); i++ {
+		newList[y+len(lines)+i] = rest[i]
+	}
+
+	e.lines = newList
 }
 func (e *Editor) deleteLines(y, num int) {
+	before := time.Now()
+	e.debugLog(time.Since(before))
+
 	if len(e.lines) <= 0 {
 		return
-	} else if len(e.lines) == 1 {
+	}
+	ta := Transaction{
+		location: Location{
+			col:  len(e.lines[y]),
+			line: y,
+		},
+		action: DELETE_LINE,
+	}
+
+	if len(e.lines) == 1 {
+		ta.text = e.lines[y]
 		e.lines[y] = ""
 	} else {
+		deletedLines := e.lines[y:utils.Min(y+num, len(e.lines))]
+		e.debugLog("lines len:", len(deletedLines))
+
+		ta.text = strings.Join(deletedLines, "\n")
 		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
 	}
-	// e.y = y
+
+	e.addTransaction(ta)
+
 	e.clampX()
 }
 func (e *Editor) clampX() {
@@ -658,7 +764,8 @@ func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		e.debugLog(key, gc.KeyString(key))
+		before := time.Now()
+		// e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -764,6 +871,7 @@ func (e *Editor) run() error {
 			}
 		case 26: // CTRL + Z
 			// TODO: do the stuff
+			e.undoTransaction()
 		case 24: // CTRL + X
 			var text string
 			if e.selected == "" {
@@ -856,7 +964,10 @@ func (e *Editor) run() error {
 				break
 			}
 
-			e.remove(1)
+			x := e.x
+			y := e.y
+			e.moveX(-1)
+			e.remove(y, x, 1)
 		default:
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {
@@ -878,7 +989,7 @@ func (e *Editor) run() error {
 		}
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
-
+		e.debugLog("run took:", time.Since(before))
 		e.draw()
 	}
 }
