@@ -1,16 +1,16 @@
 package main
 
-type Action int
+type ActionType int
 
 const (
-	INSERT Action = iota
+	INSERT ActionType = iota
 	DELETE
 	DELETE_LINE
 )
 
-type Transaction struct {
+type Action struct {
 	location Location
-	action   Action
+	action   ActionType
 	text     string
 	amount   int
 }

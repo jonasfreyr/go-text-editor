@@ -42,7 +42,7 @@ type Editor struct {
 
 	miniWindow *MiniWindow
 
-	transactions []Transaction
+	transactions []Action
 }
 
 const TabWidth = 4
@@ -412,7 +412,7 @@ func (e *Editor) removeSelection() {
 		return
 	}
 
-	// TODO: Think how you are going to encode this into an Transaction for undo
+	// TODO: Think how you are going to encode this into an Action for undo
 	// TODO: There is some weird behaviour when startX is on the beginning of the line
 	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
@@ -439,7 +439,7 @@ func (e *Editor) remove(y, x, num int) {
 
 	x -= num
 
-	ta := Transaction{
+	ta := Action{
 		location: Location{
 			line: y,
 			col:  x,
@@ -467,7 +467,7 @@ func (e *Editor) insert(y, x int, text string) {
 	e.lines[y] = e.lines[y][:x] + text + e.lines[y][x:]
 }
 
-func (e *Editor) addTransaction(transaction Transaction) {
+func (e *Editor) addTransaction(transaction Action) {
 	e.transactions = append(e.transactions, transaction)
 	if len(e.transactions) >= 100 {
 		// TODO: I think? Needs testing
@@ -491,12 +491,14 @@ func (e *Editor) undoTransaction() {
 	case DELETE_LINE:
 		lines := strings.Split(ta.text, "\n")
 		e.addLines(ta.location.line, lines)
+		e.moveYto(ta.location.line)
+		e.moveXto(ta.location.col)
 	case DELETE:
 		e.insert(ta.location.line, ta.location.col, ta.text)
-
+		e.moveYto(ta.location.line)
+		e.moveXto(ta.location.col + len(ta.text))
 	}
-	e.moveYto(ta.location.line)
-	e.moveXto(ta.location.col)
+
 }
 func (e *Editor) addLines(y int, lines []string) {
 	e.debugLog("lines:", len(e.lines))
@@ -521,7 +523,7 @@ func (e *Editor) deleteLines(y, num int) {
 	if len(e.lines) <= 0 {
 		return
 	}
-	ta := Transaction{
+	ta := Action{
 		location: Location{
 			col:  len(e.lines[y]),
 			line: y,
