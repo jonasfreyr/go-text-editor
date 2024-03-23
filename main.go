@@ -42,7 +42,7 @@ type Editor struct {
 
 	miniWindow *MiniWindow
 
-	transactions []Action
+	transactions *Transactions
 }
 
 const TabWidth = 4
@@ -221,6 +221,8 @@ func (e *Editor) Init(debug bool) {
 	}
 
 	e.lines = make([]string, 1)
+
+	e.transactions = NewTransactions()
 }
 func (e *Editor) disableColor(scr *gc.Window, color [3]int) {
 	key := utils.ColorToString(color)
@@ -414,7 +416,10 @@ func (e *Editor) removeSelection() {
 
 	// TODO: Think how you are going to encode this into an Action for undo
 	// TODO: There is some weird behaviour when startX is on the beginning of the line
-	e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
+	// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
+	text := e.lines[selectedYEnd][selectedXEnd:]
+	e.remove(selectedYStart, len(e.lines[selectedYStart]), len(e.lines[selectedYStart])-selectedXStart)
+	e.insert(selectedYStart, selectedXStart, text)
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 	e.moveYto(selectedYStart) // e.y = selectedYStart
 	e.moveXto(selectedXStart) // e.x = selectedXStart
@@ -422,36 +427,42 @@ func (e *Editor) removeSelection() {
 
 // Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
 // If you desire to remove multiple lines use deleteLines
-func (e *Editor) remove(y, x, num int) {
+func (e *Editor) removeText(y, x, num int) string {
 	// TODO: will needs some fixing to work with nums larger than 1
 	if x == 0 {
 		if y == 0 {
-			return
+			return ""
 		}
 
 		line := e.lines[y]
 
-		e.lines[y-1] += line
-
+		e.insert(y-1, len(e.lines[y-1]), line)
 		e.deleteLines(y, 1)
-		return
+		return ""
 	}
 
+	text := e.lines[y][x-num : x]
 	x -= num
 
-	ta := Action{
-		location: Location{
-			line: y,
-			col:  x,
-		},
-		action: DELETE,
-		text:   e.lines[y][x : x+num],
-	}
-	e.addTransaction(ta)
-
 	e.lines[y] = e.lines[y][:x] + e.lines[y][x+num:]
+	return text
 }
-func (e *Editor) insert(y, x int, text string) {
+func (e *Editor) remove(y, x, num int) {
+	text := e.removeText(y, x, num)
+
+	if text != "" {
+		ta := Action{
+			location: Location{
+				line: y,
+				col:  x,
+			},
+			actionType: DELETE,
+			text:       text,
+		}
+		e.transactions.addAction(ta)
+	}
+}
+func (e *Editor) insertText(y, x int, text string) (int, int) {
 	if y < 0 {
 		y = 0
 	} else if y > len(e.lines) {
@@ -465,40 +476,46 @@ func (e *Editor) insert(y, x int, text string) {
 	}
 
 	e.lines[y] = e.lines[y][:x] + text + e.lines[y][x:]
+	return y, x
 }
-
-func (e *Editor) addTransaction(transaction Action) {
-	e.transactions = append(e.transactions, transaction)
-	if len(e.transactions) >= 100 {
-		// TODO: I think? Needs testing
-		e.transactions = e.transactions[len(e.transactions)-100:]
+func (e *Editor) insert(y, x int, text string) {
+	y, x = e.insertText(y, x, text)
+	a := Action{
+		location: Location{
+			line: y,
+			col:  x,
+		},
+		actionType: INSERT,
+		text:       text,
+		amount:     len(text),
 	}
+	e.transactions.addAction(a)
 }
 func (e *Editor) undoTransaction() {
 	before := time.Now()
 	defer e.debugLog("undo took:", time.Since(before))
 
-	if len(e.transactions) == 0 {
+	ok, ta := e.transactions.pop()
+
+	if !ok {
 		return
 	}
 
-	ta := e.transactions[len(e.transactions)-1]
-	e.transactions = e.transactions[:len(e.transactions)-1]
+	e.debugLog("transactions", len(e.transactions.transactions))
 
-	e.debugLog(len(e.transactions))
-
-	switch ta.action {
-	case DELETE_LINE:
-		lines := strings.Split(ta.text, "\n")
-		e.addLines(ta.location.line, lines)
-		e.moveYto(ta.location.line)
-		e.moveXto(ta.location.col)
-	case DELETE:
-		e.insert(ta.location.line, ta.location.col, ta.text)
-		e.moveYto(ta.location.line)
-		e.moveXto(ta.location.col + len(ta.text))
+	for _, action := range ta.actions {
+		switch action.actionType {
+		case DELETE_LINE:
+			lines := strings.Split(action.text, "\n")
+			e.addLines(action.location.line, lines)
+		case DELETE:
+			e.insertText(action.location.line, action.location.col, action.text)
+		case INSERT:
+			e.removeText(action.location.line, action.location.col+action.amount, action.amount)
+		}
 	}
-
+	e.moveYto(ta.location.line)
+	e.moveXto(ta.location.col)
 }
 func (e *Editor) addLines(y int, lines []string) {
 	e.debugLog("lines:", len(e.lines))
@@ -528,7 +545,7 @@ func (e *Editor) deleteLines(y, num int) {
 			col:  len(e.lines[y]),
 			line: y,
 		},
-		action: DELETE_LINE,
+		actionType: DELETE_LINE,
 	}
 
 	if len(e.lines) == 1 {
@@ -542,9 +559,8 @@ func (e *Editor) deleteLines(y, num int) {
 		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
 	}
 
-	e.addTransaction(ta)
-
-	e.clampX()
+	e.transactions.addAction(ta)
+	// e.clampX()
 }
 func (e *Editor) clampX() {
 	line := e.lines[e.y]
@@ -603,6 +619,7 @@ func (e *Editor) moveY(delta int) {
 		e.printLinesIndex = utils.Max(e.y-TabWidth, 0)
 	}
 }
+
 func (e *Editor) moveX(delta int) {
 	if delta > 0 {
 		if e.x >= len(e.lines[e.y]) {
@@ -613,7 +630,7 @@ func (e *Editor) moveX(delta int) {
 		} else {
 			e.x += delta
 		}
-	} else {
+	} else if delta < 0 {
 		if e.x <= 0 {
 			if e.y > 0 {
 				e.moveY(-1)
@@ -773,6 +790,9 @@ func (e *Editor) run() error {
 		resetSelected := true
 		currentLine := e.lines[e.y]
 
+		beforeY, beforeX := e.y, e.x
+
+		// TODO: Make CTRL and Shift bools instead, how to do release tho?
 		switch key {
 		case gc.KEY_ESC:
 			return nil
@@ -872,7 +892,6 @@ func (e *Editor) run() error {
 				log.Println(err)
 			}
 		case 26: // CTRL + Z
-			// TODO: do the stuff
 			e.undoTransaction()
 		case 24: // CTRL + X
 			var text string
@@ -943,23 +962,23 @@ func (e *Editor) run() error {
 
 			e.lines = append(before, rest...)
 
-			e.y++
-			e.x = 0
+			e.moveY(1)
+			e.moveXto(0)
 		case gc.KEY_TAB:
 			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
 			e.moveX(1)
 		case gc.KEY_SEND:
-			e.x = len(e.lines[e.y])
+			e.moveXto(len(e.lines[e.y]))
 			resetSelected = false
 			e.selectedXEnd = e.x
 		case gc.KEY_END:
-			e.x = len(e.lines[e.y])
+			e.moveXto(len(e.lines[e.y]))
 		case gc.KEY_SHOME:
-			e.x = 0
+			e.moveXto(0)
 			resetSelected = false
 			e.selectedXEnd = e.x
 		case gc.KEY_HOME:
-			e.x = 0
+			e.moveXto(0)
 		case gc.KEY_BACKSPACE:
 			if e.selected != "" {
 				e.removeSelection()
@@ -976,8 +995,10 @@ func (e *Editor) run() error {
 				continue
 			}
 
-			e.lines[e.y] = e.lines[e.y][:e.x] + chr + e.lines[e.y][e.x:]
-			e.x++
+			// e.lines[e.y] = e.lines[e.y][:e.x] + chr + e.lines[e.y][e.x:]
+			e.insert(e.y, e.x, chr)
+			e.moveX(1)
+			// e.x++
 		}
 
 		if updateLengthIndex {
@@ -993,6 +1014,7 @@ func (e *Editor) run() error {
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
 		e.debugLog("run took:", time.Since(before))
 		e.draw()
+		e.transactions.submit(beforeY, beforeX)
 	}
 }
 func (e *Editor) Save(filepath string) error {

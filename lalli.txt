@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atotto/clipboard"
-	"github.com/jonasfreyr/playground/utils"
+	"github.com/atotto/clipboard"	
 	gc "github.com/rthornton128/goncurses"
 )
 
@@ -31,9 +30,9 @@ type Editor struct {
 	lexer    *Lexer
 	colorMap map[string]int
 
-	selectedXStart, selectedYStart int
-	selectedXEnd, selectedYEnd     int
-	selected                       string
+	selectedXStart, selectedYStart	int
+	selectedXEnd, selectedYEnd		int
+	selected						string
 
 	path string
 
