@@ -272,6 +272,11 @@ func (e *Editor) drawLineNumbers() {
 }
 func (e *Editor) accountForTabs(x, y int) int {
 	newX := 0
+
+	if x > len(e.lines[y]) {
+		x = len(e.lines[y])
+	}
+
 	for _, token := range e.lines[y][:x] {
 		if string(token) == "\t" {
 			newX += TabWidth - (newX % TabWidth)
@@ -418,9 +423,9 @@ func (e *Editor) removeSelection() {
 	// TODO: There is some weird behaviour when startX is on the beginning of the line
 	// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	text := e.lines[selectedYEnd][selectedXEnd:]
+	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 	e.remove(selectedYStart, len(e.lines[selectedYStart]), len(e.lines[selectedYStart])-selectedXStart)
 	e.insert(selectedYStart, selectedXStart, text)
-	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 	e.moveYto(selectedYStart) // e.y = selectedYStart
 	e.moveXto(selectedXStart) // e.x = selectedXStart
 }
@@ -784,7 +789,7 @@ func (e *Editor) run() error {
 		key := e.stdscr.GetChar()
 
 		before := time.Now()
-		// e.debugLog(key, gc.KeyString(key))
+		e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -821,6 +826,10 @@ func (e *Editor) run() error {
 			lineNr, err := strconv.Atoi(str)
 			if err != nil {
 				break
+			}
+
+			if lineNr == -1 {
+				lineNr = len(e.lines)
 			}
 
 			e.moveXto(0)
@@ -932,10 +941,10 @@ func (e *Editor) run() error {
 			resetSelected = false
 			e.selectedYEnd = e.y
 			e.selectedXEnd = e.x
-		case 531: // CTRL+END
+		case 531, 535: // CTRL+END
 			e.moveY(len(e.lines) - e.y)
 			updateLengthIndex = false
-		case 536: // CTRL+Home
+		case 536, 540: // CTRL+Home
 			e.moveY(-e.y)
 			updateLengthIndex = false
 		case gc.KEY_DOWN:
