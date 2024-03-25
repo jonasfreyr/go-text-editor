@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"unicode"
@@ -33,7 +34,7 @@ func (t *Token) Token() string {
 }
 
 type Lexer struct {
-	config *JSONConfig
+	config *HighlightingConfig
 	reader *strings.Reader
 
 	ch  string
@@ -42,17 +43,30 @@ type Lexer struct {
 	line, col int
 }
 
-func NewLexer() *Lexer {
+func NewLexer() (*Lexer, error) {
 	lexer := Lexer{}
 
-	config, err := ReadConfig("highlighting.json")
+	config, err := ReadHighlightingConfig("default.json")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	lexer.config = config
 
-	return &lexer
+	return &lexer, nil
+}
+
+func (l *Lexer) SetHighlighting(extension string) error {
+	config, err := ReadHighlightingConfig(fmt.Sprintf("%s.json", extension))
+	if err != nil {
+		var err2 error
+		config, err2 = ReadHighlightingConfig("default.json")
+		if err2 != nil {
+			return err2
+		}
+	}
+	l.config = config
+	return err
 }
 
 func (l *Lexer) splitMultilineToken(token Token) []Token {
@@ -116,14 +130,12 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 	}
 	return newTokens
 }
-
 func (l *Lexer) Reset() {
 	l.eof = false
 	l.ch = ""
 	l.line = 0
 	l.col = -1
 }
-
 func (l *Lexer) Tokenize(text string) [][]Token {
 	l.Reset()
 	tokens := make([][]Token, 0)

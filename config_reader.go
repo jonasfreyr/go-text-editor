@@ -5,6 +5,8 @@ import (
 	"os"
 )
 
+const HIGHLIGHTING_PATH = "./highlighting/"
+
 type TokensConfig struct {
 	Tokens []string `json:"tokens"`
 	Color  [3]int   `json:"color"`
@@ -14,7 +16,7 @@ type ColorConfig struct {
 	Color [3]int `json:"color"`
 }
 
-type JSONConfig struct {
+type HighlightingConfig struct {
 	Literals TokensConfig `json:"literals"`
 	Digits   ColorConfig  `json:"digits"`
 	Strings  ColorConfig  `json:"strings"`
@@ -26,14 +28,14 @@ type JSONConfig struct {
 	LineNr   ColorConfig  `json:"lineNr"`
 }
 
-func ReadConfig(path string) (*JSONConfig, error) {
-	f, err := os.Open(path)
+func ReadHighlightingConfig(path string) (*HighlightingConfig, error) {
+	f, err := os.Open(HIGHLIGHTING_PATH + path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	var config JSONConfig
+	var config HighlightingConfig
 	decoder := json.NewDecoder(f)
 	err = decoder.Decode(&config)
 
@@ -42,4 +44,8 @@ func ReadConfig(path string) (*JSONConfig, error) {
 	}
 
 	return &config, nil
+}
+
+func ReadEditorConfig(path string) {
+	// TODO: do the stuff
 }

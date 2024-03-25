@@ -1,0 +1,38 @@
+{
+  "literals": {
+    "tokens": [],
+    "color": [254, 254, 254]
+  },
+
+  "built_ins": {
+    "tokens": [],
+    "color": [254, 254, 254]
+  },
+
+  "types": {
+    "tokens": [],
+    "color": [254, 254, 254]
+  },
+
+  "keywords": {
+    "tokens": [],
+    "color": [254, 254, 254]
+  },
+
+  "comment": {
+    "tokens": ["//"],
+    "color": [254, 254, 254]
+  },
+  "digits": {
+    "color": [254, 254, 254]
+  },
+  "strings": {
+    "color": [254, 254, 254]
+  },
+  "default": {
+    "color": [254, 254, 254]
+  },
+  "lineNr": {
+    "color": [128,128,128]
+  }
+}

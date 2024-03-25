@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package test;
+
+import "some/random/import.proto";
+
+message TestMessage {
+	bool thing = 1;
+	string anotherThing = 2;
+}

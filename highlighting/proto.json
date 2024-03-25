@@ -1,0 +1,66 @@
+{
+  "literals": {
+    "tokens": [],
+    "color": [104,151,187]
+  },
+
+  "built_ins": {
+    "tokens": [],
+    "color": [250,198,109]
+  },
+
+  "types": {
+    "tokens": [
+      "double",
+      "float",
+      "int32",
+      "int64",
+      "uint32",
+      "uint64",
+      "sint32",
+      "sint64",
+      "fixed32",
+      "fixed64",
+      "sfixed32",
+      "sfixed64",
+      "bool",
+      "string",
+      "bytes"
+    ],
+    "color": [152,118,170]
+  },
+
+  "keywords": {
+    "tokens": [
+      "package",
+      "import",
+      "option",
+      "optional",
+      "required",
+      "repeated",
+      "group",
+      "oneof",
+      "syntax",
+      "message",
+      ";"
+    ],
+    "color": [100,53,0]
+  },
+
+  "comment": {
+    "tokens": ["//"],
+    "color": [128,128,128]
+  },
+  "digits": {
+    "color": [104,151,187]
+  },
+  "strings": {
+    "color": [106,135,89]
+  },
+  "default": {
+    "color": [254, 254, 254]
+  },
+  "lineNr": {
+    "color": [128,128,128]
+  }
+}
