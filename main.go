@@ -415,7 +415,7 @@ func (e *Editor) removeSelection() {
 		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
 		e.remove(selectedYStart, selectedXEnd, selectedXEnd-selectedXStart)
 		// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYStart][selectedXEnd:]
-		e.x = selectedXStart
+		e.moveXto(selectedXStart)
 		return
 	}
 
@@ -423,9 +423,9 @@ func (e *Editor) removeSelection() {
 	// TODO: There is some weird behaviour when startX is on the beginning of the line
 	// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYEnd][selectedXEnd:]
 	text := e.lines[selectedYEnd][selectedXEnd:]
-	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 	e.remove(selectedYStart, len(e.lines[selectedYStart]), len(e.lines[selectedYStart])-selectedXStart)
 	e.insert(selectedYStart, selectedXStart, text)
+	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
 	e.moveYto(selectedYStart) // e.y = selectedYStart
 	e.moveXto(selectedXStart) // e.x = selectedXStart
 }
@@ -433,19 +433,6 @@ func (e *Editor) removeSelection() {
 // Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
 // If you desire to remove multiple lines use deleteLines
 func (e *Editor) removeText(y, x, num int) string {
-	// TODO: will needs some fixing to work with nums larger than 1
-	if x == 0 {
-		if y == 0 {
-			return ""
-		}
-
-		line := e.lines[y]
-
-		e.insert(y-1, len(e.lines[y-1]), line)
-		e.deleteLines(y, 1)
-		return ""
-	}
-
 	text := e.lines[y][x-num : x]
 	x -= num
 
@@ -453,6 +440,19 @@ func (e *Editor) removeText(y, x, num int) string {
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
+	// TODO: will needs some fixing to work with nums larger than 1
+	if x == 0 {
+		if y == 0 {
+			return
+		}
+
+		line := e.lines[y]
+
+		e.insert(y-1, len(e.lines[y-1]), line)
+		e.deleteLines(y, 1)
+		return
+	}
+
 	text := e.removeText(y, x, num)
 
 	if text != "" {
@@ -958,6 +958,10 @@ func (e *Editor) run() error {
 		case gc.KEY_RIGHT:
 			e.moveX(1)
 		case gc.KEY_ENTER, gc.KEY_RETURN:
+			if e.selected != "" {
+				e.removeSelection()
+			}
+
 			newLine := e.lines[e.y][:e.x]
 			e.lines[e.y] = e.lines[e.y][e.x:]
 
@@ -974,6 +978,10 @@ func (e *Editor) run() error {
 			e.moveY(1)
 			e.moveXto(0)
 		case gc.KEY_TAB:
+			if e.selected != "" {
+				e.removeSelection()
+			}
+
 			e.lines[e.y] = e.lines[e.y][:e.x] + "\t" + e.lines[e.y][e.x:]
 			e.moveX(1)
 		case gc.KEY_SEND:
@@ -1002,6 +1010,10 @@ func (e *Editor) run() error {
 			chr := gc.KeyString(key)
 			if len(chr) > 1 {
 				continue
+			}
+
+			if e.selected != "" {
+				e.removeSelection()
 			}
 
 			// e.lines[e.y] = e.lines[e.y][:e.x] + chr + e.lines[e.y][e.x:]

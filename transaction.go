@@ -21,7 +21,7 @@ type Transaction struct {
 }
 
 func (t *Transaction) addAction(action Action) {
-	t.actions = append(t.actions, action)
+	t.actions = append([]Action{action}, t.actions...)
 }
 
 type Transactions struct {
