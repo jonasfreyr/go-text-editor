@@ -43,6 +43,8 @@ type Editor struct {
 	miniWindow *MiniWindow
 
 	transactions *Transactions
+
+	modified bool
 }
 
 const TabWidth = 4
@@ -440,6 +442,8 @@ func (e *Editor) removeText(y, x, num int) string {
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
+	e.modified = true
+
 	// TODO: will needs some fixing to work with nums larger than 1
 	if x == 0 {
 		if y == 0 {
@@ -484,6 +488,8 @@ func (e *Editor) insertText(y, x int, text string) (int, int) {
 	return y, x
 }
 func (e *Editor) insert(y, x int, text string) {
+	e.modified = true
+
 	y, x = e.insertText(y, x, text)
 	a := Action{
 		location: Location{
@@ -540,11 +546,13 @@ func (e *Editor) addLines(y int, lines []string) {
 }
 func (e *Editor) deleteLines(y, num int) {
 	before := time.Now()
-	e.debugLog(time.Since(before))
+	defer e.debugLog(time.Since(before))
 
 	if len(e.lines) <= 0 {
 		return
 	}
+	e.modified = true
+
 	ta := Action{
 		location: Location{
 			col:  len(e.lines[y]),
@@ -800,6 +808,14 @@ func (e *Editor) run() error {
 		// TODO: Make CTRL and Shift bools instead, how to do release tho?
 		switch key {
 		case gc.KEY_ESC:
+			if e.modified {
+				str := e.miniWindow.run(false, "unsaved, are you sure? (y/n)")
+				if strings.ToLower(str) == "y" {
+					return nil
+				}
+				break
+			}
+
 			return nil
 		case 562, 566: // CTRL + Shift + Right
 			e.ctrlMoveRight()
@@ -1039,6 +1055,7 @@ func (e *Editor) run() error {
 	}
 }
 func (e *Editor) Save(filepath string) error {
+	e.modified = false
 	data := []byte(strings.Join(e.lines, "\n"))
 	err := os.WriteFile(filepath, data, 0666)
 	if err != nil {
