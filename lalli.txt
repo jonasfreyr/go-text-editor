@@ -17,6 +17,8 @@ type Editor struct {
 	lineNrscr *gc.Window
 
 	maxX, maxY int
+	
+	lalli int
 
 	x, y int
 	visX int
