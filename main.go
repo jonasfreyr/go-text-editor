@@ -478,7 +478,7 @@ func (e *Editor) remove(y, x, num int) {
 		ta := Action{
 			location: Location{
 				line: y,
-				col:  x,
+				col:  x - num,
 			},
 			actionType: DELETE,
 			text:       text,
