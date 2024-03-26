@@ -38,7 +38,6 @@ type Editor struct {
 
 	path string
 
-	debug    bool
 	debugscr *gc.Window
 
 	miniWindow *MiniWindow
@@ -51,9 +50,10 @@ type Editor struct {
 }
 
 var colorIndex = 1
+var DEBUG_MODE = false
 
 func (e *Editor) debugLog(args ...any) {
-	if !e.debug {
+	if !DEBUG_MODE {
 		return
 	}
 
@@ -144,7 +144,7 @@ func (e *Editor) initColor() error {
 	//}
 	return nil
 }
-func (e *Editor) Init(debug bool) {
+func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
 
@@ -161,8 +161,7 @@ func (e *Editor) Init(debug bool) {
 	TabWidth = e.config.TabWidth
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
-	e.debug = debug
-	if debug {
+	if DEBUG_MODE {
 		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 0, e.config.LineNumberWidth)
 		if err != nil {
 			e.End()
@@ -1100,24 +1099,19 @@ func main() {
 	}
 
 	path := os.Args[1]
-	debug := false
 	if len(os.Args) >= 3 && os.Args[2] == "--debug" {
-		debug = true
+		DEBUG_MODE = true
 	}
+
+	InitHomeFolder()
 
 	err := EnsureGimFolderExists()
 	if err != nil {
 		panic(err)
 	}
 
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		homedir = "."
-	} else {
-		homedir += "/.gim"
-	}
-
-	f, err := os.Create(homedir + "/logs.txt")
+	homedir := getHomePath()
+	f, err := os.Create(JoinPath(homedir, "logs.txt"))
 	if err != nil {
 		panic(err)
 	}
@@ -1126,7 +1120,7 @@ func main() {
 	defer f.Close()
 
 	e := &Editor{}
-	e.Init(debug)
+	e.Init()
 	defer e.End()
 
 	if path != "" {

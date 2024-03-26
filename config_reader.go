@@ -3,11 +3,19 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
 
-const GIM_PATH = "/.gim/"
-const HIGHLIGHTING_PATH = GIM_PATH + "highlighting/"
-const EDITOR_CONFIG_PATH = GIM_PATH + "config.config"
+func JoinPath(paths ...string) string {
+	return strings.Join(paths, "/")
+}
+
+var HOME_PATH = "."
+
+const GIM_PATH = ".gim"
+
+var HIGHLIGHTING_PATH = JoinPath(GIM_PATH, "highlighting")
+var EDITOR_CONFIG_PATH = JoinPath(GIM_PATH, "config.config")
 
 type TokensConfig struct {
 	Tokens []string `json:"tokens"`
@@ -37,13 +45,21 @@ type EditorConfig struct {
 	TabWidth        int         `json:"tab_width"`
 }
 
-func ReadHighlightingConfig(path string) (*HighlightingConfig, error) {
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+func InitHomeFolder() {
+	homeDir, err := os.UserHomeDir()
+	if err == nil && !DEBUG_MODE {
+		HOME_PATH = homeDir
 	}
+}
 
-	f, err := os.Open(homedir + HIGHLIGHTING_PATH + path)
+func getHomePath() string {
+	return HOME_PATH
+}
+
+func ReadHighlightingConfig(path string) (*HighlightingConfig, error) {
+	homedir := getHomePath()
+
+	f, err := os.Open(JoinPath(homedir, HIGHLIGHTING_PATH, path))
 	if err != nil {
 		return nil, err
 	}
@@ -61,12 +77,7 @@ func ReadHighlightingConfig(path string) (*HighlightingConfig, error) {
 }
 
 func EnsureGimFolderExists() error {
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	path := homedir + GIM_PATH
+	path := JoinPath(getHomePath(), GIM_PATH)
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.Mkdir(path, os.ModePerm)
@@ -91,13 +102,7 @@ func getDefaultEditorConfigValues() *EditorConfig {
 func createDefaultEditorConfig() (*EditorConfig, error) {
 	config := getDefaultEditorConfigValues()
 
-	homedir, err := os.UserHomeDir()
-
-	if err != nil {
-		return config, err
-	}
-
-	file, err := os.Create(homedir + EDITOR_CONFIG_PATH)
+	file, err := os.Create(JoinPath(getHomePath(), EDITOR_CONFIG_PATH))
 
 	if err != nil {
 		return config, err
@@ -129,12 +134,7 @@ func getDefaultHighlightingConfigValues() *HighlightingConfig {
 }
 
 func ensureHighlightingFolderExists() error {
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	path := homedir + HIGHLIGHTING_PATH
+	path := JoinPath(getHomePath(), HIGHLIGHTING_PATH)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.Mkdir(path, os.ModePerm)
 		if err != nil {
@@ -149,18 +149,12 @@ func ensureHighlightingFolderExists() error {
 func createDefaultHighlightingConfig() (*HighlightingConfig, error) {
 	config := getDefaultHighlightingConfigValues()
 
-	homedir, err := os.UserHomeDir()
-
+	err := ensureHighlightingFolderExists()
 	if err != nil {
 		return config, err
 	}
 
-	err = ensureHighlightingFolderExists()
-	if err != nil {
-		return config, err
-	}
-
-	file, err := os.Create(homedir + HIGHLIGHTING_PATH + "default.json")
+	file, err := os.Create(JoinPath(getHomePath(), HIGHLIGHTING_PATH, "default.json"))
 	if err != nil {
 		return config, err
 	}
@@ -172,12 +166,7 @@ func createDefaultHighlightingConfig() (*HighlightingConfig, error) {
 }
 
 func ReadEditorConfig() (*EditorConfig, error) {
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(homedir + EDITOR_CONFIG_PATH)
+	f, err := os.Open(JoinPath(getHomePath(), EDITOR_CONFIG_PATH))
 	if err != nil {
 		config, err := createDefaultEditorConfig()
 		return config, err
