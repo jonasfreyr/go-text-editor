@@ -21,6 +21,8 @@ type Token struct {
 	location Location
 }
 
+var TabWidth int
+
 func (t *Token) Length() int {
 	if t.lexeme == "\n" {
 		return TabWidth - (t.location.col)%TabWidth
@@ -48,7 +50,10 @@ func NewLexer() (*Lexer, error) {
 
 	config, err := ReadHighlightingConfig("default.json")
 	if err != nil {
-		return nil, err
+		config, err = createDefaultHighlightingConfig()
+		if err != nil {
+			return nil, err // TODO: Might not need to return error as there will always be a config
+		}
 	}
 
 	lexer.config = config

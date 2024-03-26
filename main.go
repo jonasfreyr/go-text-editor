@@ -46,9 +46,9 @@ type Editor struct {
 	transactions *Transactions
 
 	modified bool
-}
 
-const TabWidth = 4
+	config *EditorConfig
+}
 
 var colorIndex = 1
 
@@ -113,7 +113,7 @@ func (e *Editor) setColor(color [3]int) error {
 func (e *Editor) setColors() error {
 	colorIndex = 1
 	e.colorMap = make(map[string]int)
-	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.lexer.config.LineNr.Color,
+	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.config.LineNumberColor.Color,
 		e.lexer.config.Keywords.Color, e.lexer.config.Comment.Color, e.lexer.config.Digits.Color, e.lexer.config.Strings.Color, e.lexer.config.Default.Color} {
 		err := e.setColor(colorArray)
 		if err != nil {
@@ -152,36 +152,49 @@ func (e *Editor) Init(debug bool) {
 		log.Fatal("init", err)
 	}
 
+	e.config, err = ReadEditorConfig()
+	if err != nil {
+		e.debugLog(err)
+	}
+
+	// TODO: I hate this
+	TabWidth = e.config.TabWidth
+
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 	e.debug = debug
 	if debug {
-		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 0, 4)
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 0, e.config.LineNumberWidth)
 		if err != nil {
+			e.End()
 			log.Fatal(err)
 		}
 
-		e.debugscr, err = gc.NewWindow(e.maxY, e.maxX*3/5-4, 0, e.maxX*3/5+4)
+		e.debugscr, err = gc.NewWindow(e.maxY, e.maxX*3/5-e.config.LineNumberWidth, 0, e.maxX*3/5+e.config.LineNumberWidth)
 		e.debugscr.ScrollOk(true)
 		if err != nil {
+			e.End()
 			log.Fatal(err)
 		}
 
 		e.maxY, e.maxX = e.stdscr.MaxYX()
 
 	} else {
-		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, 4)
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, e.config.LineNumberWidth)
 		if err != nil {
+			e.End()
 			log.Fatal(err)
 		}
 	}
 
-	e.lineNrscr, err = gc.NewWindow(e.maxY, 4, 0, 0)
+	e.lineNrscr, err = gc.NewWindow(e.maxY, e.config.LineNumberWidth, 0, 0)
 	if err != nil {
+		e.End()
 		log.Fatal(err)
 	}
 
 	e.lexer, err = NewLexer()
 	if err != nil {
+		e.End()
 		log.Fatal("failed to load lexer: ", err)
 	}
 
@@ -197,10 +210,11 @@ func (e *Editor) Init(debug bool) {
 
 	err = e.stdscr.Keypad(true)
 	if err != nil {
+		e.End()
 		log.Fatal(err)
 	}
 
-	gc.SetTabSize(TabWidth)
+	gc.SetTabSize(e.config.TabWidth)
 
 	//go func() {
 	//	count := 0
@@ -270,11 +284,11 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 func (e *Editor) drawLineNumbers() {
 	start := e.printLinesIndex
 	e.lineNrscr.Erase()
-	e.enableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
+	e.enableColor(e.lineNrscr, e.config.LineNumberColor.Color)
 	for i := 1; i <= e.maxY; i++ {
 		e.lineNrscr.MovePrint(i-1, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
 	}
-	e.disableColor(e.lineNrscr, e.lexer.config.LineNr.Color)
+	e.disableColor(e.lineNrscr, e.config.LineNumberColor.Color)
 	e.lineNrscr.Refresh()
 }
 func (e *Editor) accountForTabs(x, y int) int {
@@ -286,7 +300,7 @@ func (e *Editor) accountForTabs(x, y int) int {
 
 	for _, token := range e.lines[y][:x] {
 		if string(token) == "\t" {
-			newX += TabWidth - (newX % TabWidth)
+			newX += e.config.TabWidth - (newX % e.config.TabWidth)
 		} else {
 			newX++
 		}
@@ -299,10 +313,10 @@ func (e *Editor) draw() {
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
 	// TODO: Don't know why it is 8 instead of 4
-	if accountedForTabs-e.printLineStartIndex > e.maxX-TabWidth*2 {
-		e.printLineStartIndex = accountedForTabs - e.maxX + TabWidth*2
-	} else if accountedForTabs-TabWidth*2 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(accountedForTabs-TabWidth*2, 0)
+	if accountedForTabs-e.printLineStartIndex > e.maxX-e.config.TabWidth*2 {
+		e.printLineStartIndex = accountedForTabs - e.maxX + e.config.TabWidth*2
+	} else if accountedForTabs-e.config.TabWidth*2 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(accountedForTabs-e.config.TabWidth*2, 0)
 	}
 
 	selectedXStart := e.accountForTabs(e.selectedXStart, e.selectedYStart)
@@ -643,13 +657,12 @@ func (e *Editor) moveY(delta int) {
 
 	e.clampX()
 
-	if e.y-e.printLinesIndex > e.maxY-TabWidth {
-		e.printLinesIndex = e.y - e.maxY + TabWidth
-	} else if e.y-TabWidth < e.printLinesIndex {
-		e.printLinesIndex = utils.Max(e.y-TabWidth, 0)
+	if e.y-e.printLinesIndex > e.maxY-e.config.TabWidth {
+		e.printLinesIndex = e.y - e.maxY + e.config.TabWidth
+	} else if e.y-e.config.TabWidth < e.printLinesIndex {
+		e.printLinesIndex = utils.Max(e.y-e.config.TabWidth, 0)
 	}
 }
-
 func (e *Editor) moveX(delta int) {
 	if delta > 0 {
 		if e.x >= len(e.lines[e.y]) {
@@ -1092,17 +1105,29 @@ func main() {
 		debug = true
 	}
 
-	e := &Editor{}
-	e.Init(debug)
-	defer e.End()
+	err := EnsureGimFolderExists()
+	if err != nil {
+		panic(err)
+	}
 
-	f, err := os.Create("logs.txt")
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		homedir = "."
+	} else {
+		homedir += "/.gim"
+	}
+
+	f, err := os.Create(homedir + "/logs.txt")
 	if err != nil {
 		panic(err)
 	}
 
 	log.SetOutput(f)
 	defer f.Close()
+
+	e := &Editor{}
+	e.Init(debug)
+	defer e.End()
 
 	if path != "" {
 		_ = e.Load(path)
