@@ -21,6 +21,7 @@ type Token struct {
 	location Location
 }
 
+// TODO: I hate this
 var TabWidth int
 
 func (t *Token) Length() int {

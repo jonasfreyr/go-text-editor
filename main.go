@@ -940,6 +940,40 @@ func (e *Editor) run() error {
 			if err != nil {
 				break
 			}
+		case 18: // CTRL + R
+			for {
+				str1 := e.miniWindow.run(false, "replace(find)")
+				if str1 == "" {
+					break
+				}
+
+				y, x := e.find(str1)
+				if y == -1 || x == -1 {
+					continue
+				}
+
+				e.moveYto(y)
+				e.moveXto(x)
+
+				resetSelected = false
+				e.selectedXStart = e.x
+				e.selectedYStart = e.y
+				e.selectedXEnd = e.x + len(str1)
+				e.selectedYEnd = e.y
+
+				e.draw()
+
+				str2 := e.miniWindow.run(false, "replace(overwrite)")
+				if str2 == "" {
+					break
+				}
+
+				e.removeSelection()
+				e.insert(e.selectedYStart, e.selectedXStart, str2)
+				e.selectedXEnd = e.x + len(str2)
+
+				e.draw()
+			}
 		case 19: // CTRL + S
 			err := e.Save(e.path)
 			if err != nil {
