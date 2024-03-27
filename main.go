@@ -543,6 +543,34 @@ func (e *Editor) undoTransaction() {
 	e.moveYto(ta.location.line)
 	e.moveXto(ta.location.col)
 }
+func (e *Editor) redoTransaction() {
+	before := time.Now()
+	defer e.debugLog("redo took:", time.Since(before))
+
+	ok, ta := e.transactions.redoPop()
+
+	if !ok {
+		return
+	}
+
+	e.debugLog("transactions", len(e.transactions.transactions))
+
+	for _, action := range utils.Reverse(ta.actions) {
+		e.debugLog(action.actionType)
+		switch action.actionType {
+		case DELETE_LINE:
+			lines := strings.Split(action.text, "\n")
+			e.deleteLinesText(action.location.line, len(lines))
+		case DELETE:
+			e.removeText(action.location.line, action.location.col+len(action.text), len(action.text))
+		case INSERT:
+			e.insertText(action.location.line, action.location.col+action.amount, action.text)
+		}
+	}
+	e.moveYto(ta.location.line)
+	e.moveXto(ta.location.col)
+}
+
 func (e *Editor) addLines(y int, lines []string) {
 	e.debugLog("lines:", len(e.lines))
 
@@ -559,14 +587,30 @@ func (e *Editor) addLines(y int, lines []string) {
 
 	e.lines = newList
 }
-func (e *Editor) deleteLines(y, num int) {
+func (e *Editor) deleteLinesText(y, num int) (text string) {
 	before := time.Now()
 	defer e.debugLog(time.Since(before))
 
+	e.modified = true
+	if len(e.lines) == 1 {
+		text = e.lines[y]
+		e.lines[y] = ""
+	} else {
+		deletedLines := e.lines[y:utils.Min(y+num, len(e.lines))]
+		e.debugLog("lines len:", len(deletedLines))
+
+		text = strings.Join(deletedLines, "\n")
+		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
+	}
+	return
+	// e.clampX()
+}
+func (e *Editor) deleteLines(y, num int) {
 	if len(e.lines) <= 0 {
 		return
 	}
-	e.modified = true
+
+	text := e.deleteLinesText(y, num)
 
 	ta := Action{
 		location: Location{
@@ -574,21 +618,10 @@ func (e *Editor) deleteLines(y, num int) {
 			line: y,
 		},
 		actionType: DELETE_LINE,
-	}
-
-	if len(e.lines) == 1 {
-		ta.text = e.lines[y]
-		e.lines[y] = ""
-	} else {
-		deletedLines := e.lines[y:utils.Min(y+num, len(e.lines))]
-		e.debugLog("lines len:", len(deletedLines))
-
-		ta.text = strings.Join(deletedLines, "\n")
-		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
+		text:       text,
 	}
 
 	e.transactions.addAction(ta)
-	// e.clampX()
 }
 func (e *Editor) clampX() {
 	line := e.lines[e.y]
@@ -826,7 +859,7 @@ func (e *Editor) run() error {
 		key := e.stdscr.GetChar()
 
 		//before := time.Now()
-		//e.debugLog(key, gc.KeyString(key))
+		e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -996,6 +1029,8 @@ func (e *Editor) run() error {
 			if err != nil {
 				panic(err)
 			}
+		case 25: // CTRL + Y
+			e.redoTransaction()
 		case 336: // Shift+Down
 			e.moveY(1)
 			updateLengthIndex = false
