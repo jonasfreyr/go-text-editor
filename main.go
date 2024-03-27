@@ -307,7 +307,7 @@ func (e *Editor) accountForTabs(x, y int) int {
 	return newX
 }
 func (e *Editor) draw() {
-	before := time.Now()
+	// before := time.Now()
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
@@ -415,8 +415,8 @@ func (e *Editor) draw() {
 
 	e.stdscr.Refresh()
 
-	dt := time.Since(before)
-	e.debugLog("draw time:", dt)
+	// dt := time.Since(before)
+	// e.debugLog("draw time:", dt)
 }
 func (e *Editor) End() {
 	gc.End()
@@ -692,15 +692,15 @@ func (e *Editor) moveYto(y int) {
 func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	index := -1
 	for i, token := range tokens {
-		e.debugLog("X:", x, "token:", token.location.col, "tokenSize:", token.location.col+token.Length())
+		//e.debugLog("X:", x, "token:", token.location.col, "tokenSize:", token.location.col+token.Length())
 		if token.location.col <= x && token.location.col+token.Length() >= x {
 			index = i
-			e.debugLog("found")
+			// e.debugLog("found")
 			break
 		}
 	}
-	e.debugLog("returning", index)
-	e.debugLog("--------------------")
+	//e.debugLog("returning", index)
+	//e.debugLog("--------------------")
 	return index
 }
 func filterSpacesAndTabs(tokens []Token) []Token {
@@ -786,7 +786,7 @@ func (e *Editor) ctrlMoveRight() {
 
 	if tonken.location.col+tonken.Length() == e.x && i != len(tonkens)-1 {
 		nextTonken := tonkens[i+1]
-		e.debugLog("next: ", nextTonken.location.col)
+		//e.debugLog("next: ", nextTonken.location.col)
 		e.moveX(nextTonken.location.col + nextTonken.Length() - e.x)
 	} else {
 		e.moveX(tonken.location.col + tonken.Length() - e.x)
@@ -825,8 +825,8 @@ func (e *Editor) run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		before := time.Now()
-		e.debugLog(key, gc.KeyString(key))
+		//before := time.Now()
+		//e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -866,20 +866,30 @@ func (e *Editor) run() error {
 		case 567, 571: // CTRL + Up
 			e.printLinesIndex = utils.Max(e.printLinesIndex-1, 0)
 			resetSelected = false
-		case 7: // CTRL + G
-			str := e.miniWindow.run(true, "goto")
-			lineNr, err := strconv.Atoi(str)
+		case 1: // CTRL + A
+			e.selectedYStart = 0
+			e.selectedXStart = 0
+			e.selectedXEnd = len(e.lines[len(e.lines)-1])
+			e.selectedYEnd = len(e.lines) - 1
+
+			e.moveYto(e.selectedYEnd)
+			e.moveXto(e.selectedXEnd)
+			//e.x = e.selectedXEnd
+			//e.y = e.selectedYEnd
+			resetSelected = false
+		case 3: // CTRL + C
+			text := e.selected
+			if e.selected == "" {
+				text = "\n" + currentLine
+			}
+			err := clipboard.WriteAll(text)
 			if err != nil {
-				break
+				panic(err)
 			}
-
-			if lineNr == -1 {
-				lineNr = len(e.lines)
-			}
-
-			e.moveXto(0)
-			e.inlinePosition = 0
-			e.moveYto(lineNr - 1)
+		case 4: // CTRL + D
+			e.deleteLines(e.y, 1)
+			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
+			e.clampX()
 		case 6: // CTRL + F
 			for {
 				str := e.miniWindow.run(false, "find")
@@ -907,30 +917,20 @@ func (e *Editor) run() error {
 
 				e.draw()
 			}
-		case 1: // CTRL + A
-			e.selectedYStart = 0
-			e.selectedXStart = 0
-			e.selectedXEnd = len(e.lines[len(e.lines)-1])
-			e.selectedYEnd = len(e.lines) - 1
-
-			e.moveYto(e.selectedYEnd)
-			e.moveXto(e.selectedXEnd)
-			//e.x = e.selectedXEnd
-			//e.y = e.selectedYEnd
-			resetSelected = false
-		case 3: // CTRL + C
-			text := e.selected
-			if e.selected == "" {
-				text = "\n" + currentLine
-			}
-			err := clipboard.WriteAll(text)
+		case 7: // CTRL + G
+			str := e.miniWindow.run(true, "goto")
+			lineNr, err := strconv.Atoi(str)
 			if err != nil {
-				panic(err)
+				break
 			}
-		case 4: // CTRL + D
-			e.deleteLines(e.y, 1)
-			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
-			e.clampX()
+
+			if lineNr == -1 {
+				lineNr = len(e.lines)
+			}
+
+			e.moveXto(0)
+			e.inlinePosition = 0
+			e.moveYto(lineNr - 1)
 		case 15: // CTRL + O
 			str := e.miniWindow.run(false, "open")
 			if str == "" {
@@ -1112,7 +1112,7 @@ func (e *Editor) run() error {
 		}
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
-		e.debugLog("run took:", time.Since(before))
+		//e.debugLog("run took:", time.Since(before))
 		e.draw()
 		e.transactions.submit(beforeY, beforeX)
 	}
