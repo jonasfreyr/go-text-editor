@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1061,6 +1062,30 @@ func (e *Editor) run() error {
 		case 536, 540: // CTRL+Home
 			e.moveY(-e.y)
 			updateLengthIndex = false
+		case gc.KEY_F5:
+			command := e.miniWindow.run(false, "run")
+			if command == "" {
+				break
+			}
+
+			commandList := strings.Split(command, " ")
+			cmdName := commandList[0]
+			var cmd *exec.Cmd
+			if len(commandList) > 1 {
+				cmd = exec.Command(cmdName, command[1:])
+			} else {
+				cmd = exec.Command(cmdName)
+			}
+
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				e.debugLog("2")
+				e.debugLog(err)
+				break
+			}
+			e.debugLog(string(output))
+
+			// e.Run()
 		case gc.KEY_DOWN:
 			e.moveY(1)
 			updateLengthIndex = false
