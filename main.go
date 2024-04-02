@@ -565,7 +565,7 @@ func (e *Editor) redoTransaction() {
 		case DELETE:
 			e.removeText(action.location.line, action.location.col+len(action.text), len(action.text))
 		case INSERT:
-			e.insertText(action.location.line, action.location.col+action.amount, action.text)
+			e.insertText(action.location.line, action.location.col, action.text)
 		}
 	}
 	e.moveYto(ta.location.line)
@@ -1007,6 +1007,7 @@ func (e *Editor) run() error {
 				e.selectedXEnd = e.x + len(str2)
 
 				e.draw()
+				e.transactions.submit(e.y, e.x)
 			}
 		case 19: // CTRL + S
 			err := e.Save(e.path)
@@ -1079,7 +1080,7 @@ func (e *Editor) run() error {
 
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				e.debugLog("2")
+				e.debugLog("1")
 				e.debugLog(err)
 				break
 			}
