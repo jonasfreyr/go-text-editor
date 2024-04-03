@@ -10,14 +10,23 @@ type MenuWindow struct {
 	menu   *gc.Menu
 }
 
-func NewMenuWindow(stdscr *gc.Window) (*MenuWindow, error) {
+func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
+	stdscr, err := gc.NewWindow(h, w, y, x)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = stdscr.Keypad(true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	menu, _ := gc.NewMenu([]*gc.MenuItem{})
-	err := menu.SetWindow(stdscr)
+	err = menu.SetWindow(stdscr)
 	if err != nil {
 		return nil, err
 	}
-
-	dwin := stdscr.Derived(6, 38, 3, 1) // TODO: figure out what this actually does
+	log.Println("This is the I:", h)
+	dwin := stdscr.Derived(h-3, w-1, 3, 1)
 	err = menu.SubWindow(dwin)
 	if err != nil {
 		return nil, err
@@ -44,22 +53,24 @@ func (m *MenuWindow) Free() {
 func (m *MenuWindow) run(items []string, title string) (string, error) {
 	gc.Cursor(0)
 	defer gc.Cursor(1)
+	m.stdscr.Erase()
 
 	// build the menu items
 	menuItems := make([]*gc.MenuItem, len(items))
 	for i, val := range items {
+		log.Println(val)
 		menuItems[i], _ = gc.NewItem(val, "")
 		defer menuItems[i].Free()
 	}
+
+	_, x := m.stdscr.MaxYX()
+	//m.stdscr.Resize(len(items)+4, x) // TODO: Needs fixing if it gets too big
 
 	err := m.menu.SetItems(menuItems)
 	if err != nil {
 		return "", err
 	}
 
-	// Print centered menu title
-	m.stdscr.Erase()
-	_, x := m.stdscr.MaxYX()
 	m.stdscr.Box(0, 0)
 	m.stdscr.MovePrint(1, (x/2)-(len(title)/2), title)
 	m.stdscr.MoveAddChar(2, 0, gc.ACS_LTEE)
@@ -73,6 +84,8 @@ func (m *MenuWindow) run(items []string, title string) (string, error) {
 
 	defer m.menu.UnPost()
 	m.stdscr.Refresh()
+
+	log.Println("Menu count:", m.menu.Count())
 
 	for {
 		gc.Update()

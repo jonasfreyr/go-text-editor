@@ -248,15 +248,8 @@ func (e *Editor) Init() {
 
 	e.transactions = NewTransactions()
 
-	menuStdscr, err := gc.NewWindow(10, 40, e.maxY/4, utils.Max(e.maxX/2-(40/2), 4))
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = menuStdscr.Keypad(true)
-	if err != nil {
-		log.Fatal(err)
-	}
-	e.menuWindow, err = NewMenuWindow(menuStdscr)
+	width := e.maxX - 12
+	e.menuWindow, err = NewMenuWindow(0, utils.Max(e.maxX/2-(width/2), 4), e.maxY, width)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -975,14 +968,60 @@ func (e *Editor) Run() error {
 			e.inlinePosition = 0
 			e.moveYto(lineNr - 1)
 		case 15: // CTRL + O
-			str := e.miniWindow.run(false, "open")
-			if str == "" {
+			//str := e.miniWindow.run(false, "open")
+			//if str == "" {
+			//	break
+			//}
+			//err := e.Load(str)
+			//if err != nil {
+			//	break
+			//}
+
+			currentPath := "."
+			for {
+				files, err := os.ReadDir(currentPath)
+				if err != nil {
+					e.debugLog(err)
+					break
+				}
+
+				fileNames := make([]string, len(files))
+				for i, file := range files {
+					fileNames[i] = file.Name()
+				}
+
+				e.draw()
+				selected, err := e.menuWindow.run(fileNames, currentPath)
+				if err != nil {
+					e.debugLog(err)
+					break
+				}
+				if selected == "" {
+					if currentPath == "." {
+						break
+					}
+					currentPath = filepath.Dir(currentPath)
+				}
+
+				currentPath = filepath.Join(currentPath, selected)
+
+				fileInfo, err := os.Stat(currentPath)
+				if err != nil {
+					e.debugLog(err)
+					break
+				}
+
+				if fileInfo.IsDir() {
+					continue
+				}
+
+				err = e.Load(currentPath)
+				if err != nil {
+					e.debugLog(err)
+				}
 				break
 			}
-			err := e.Load(str)
-			if err != nil {
-				break
-			}
+
 		case 18: // CTRL + R
 			for {
 				str1 := e.miniWindow.run(false, "replace(find)")
