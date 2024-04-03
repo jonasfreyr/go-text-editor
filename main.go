@@ -42,12 +42,15 @@ type Editor struct {
 	debugscr *gc.Window
 
 	miniWindow *MiniWindow
+	menuWindow *MenuWindow
 
 	transactions *Transactions
 
 	modified bool
 
 	config *EditorConfig
+
+	recent map[string]string
 }
 
 var colorIndex = 1
@@ -244,6 +247,21 @@ func (e *Editor) Init() {
 	e.lines = make([]string, 1)
 
 	e.transactions = NewTransactions()
+
+	menuStdscr, err := gc.NewWindow(10, 40, e.maxY/4, utils.Max(e.maxX/2-(40/2), 4))
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = menuStdscr.Keypad(true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	e.menuWindow, err = NewMenuWindow(menuStdscr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	e.recent = make(map[string]string)
 }
 func (e *Editor) disableColor(scr *gc.Window, color [3]int) {
 	key := utils.ColorToString(color)
@@ -420,6 +438,7 @@ func (e *Editor) draw() {
 	// e.debugLog("draw time:", dt)
 }
 func (e *Editor) End() {
+	e.menuWindow.Free()
 	gc.End()
 }
 func (e *Editor) removeSelection() {
@@ -571,7 +590,6 @@ func (e *Editor) redoTransaction() {
 	e.moveYto(ta.location.line)
 	e.moveXto(ta.location.col)
 }
-
 func (e *Editor) addLines(y int, lines []string) {
 	e.debugLog("lines:", len(e.lines))
 
@@ -682,6 +700,9 @@ func (e *Editor) Load(filePath string) error {
 	e.lines = text
 
 	e.draw()
+
+	filename := filepath.Base(filePath)
+	e.recent[filename] = filePath
 
 	return nil
 }
@@ -845,18 +866,6 @@ func (e *Editor) find(text string) (int, int) {
 }
 func (e *Editor) Run() error {
 	for {
-		err := e.run()
-
-		if err != nil {
-			e.debugLog(err)
-
-		} else {
-			return nil
-		}
-	}
-}
-func (e *Editor) run() error {
-	for {
 		key := e.stdscr.GetChar()
 
 		//before := time.Now()
@@ -1014,6 +1023,28 @@ func (e *Editor) run() error {
 			if err != nil {
 				log.Println(err)
 			}
+		case 20: // CTRL + T
+			filenames := make([]string, len(e.recent))
+			i := 0
+			for filename, _ := range e.recent {
+				filenames[i] = filename
+				i++
+			}
+
+			selected, err := e.menuWindow.run(filenames, "Recent")
+			if err != nil {
+				e.debugLog(err)
+			}
+
+			if selected != "" && e.recent[selected] != e.path {
+				err = e.Load(e.recent[selected])
+				if err != nil {
+					e.debugLog(err)
+
+				}
+				continue
+			}
+
 		case 26: // CTRL + Z
 			e.undoTransaction()
 		case 24: // CTRL + X
