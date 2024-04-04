@@ -434,7 +434,6 @@ func (e *Editor) draw() {
 	// e.debugLog("draw time:", dt)
 }
 func (e *Editor) End() {
-	e.menuWindow.Free()
 	gc.End()
 }
 func (e *Editor) removeSelection() {

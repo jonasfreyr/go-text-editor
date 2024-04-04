@@ -1,14 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"github.com/jonasfreyr/playground/utils"
 	gc "github.com/rthornton128/goncurses"
 	"log"
 )
 
 type MenuWindow struct {
-	stdscr *gc.Window
-	menu   *gc.Menu
+	stdscr    *gc.Window
+	subWindow *gc.Window
+
+	selected   int
+	itemOffSet int
+
+	mark string
 }
 
 func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
@@ -21,91 +26,84 @@ func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 		log.Fatal(err)
 	}
 
-	menu, _ := gc.NewMenu([]*gc.MenuItem{})
-	err = menu.SetWindow(stdscr)
-	if err != nil {
-		return nil, err
-	}
 	log.Println("This is the I:", h)
-	dwin := stdscr.Derived(h-3, w-1, 3, 1)
-
-	my, mx := dwin.MaxYX()
-	log.Println("This is the maxY, maxX:", my, mx)
-
-	err = menu.SubWindow(dwin)
-	if err != nil {
-		return nil, err
-	}
-	err = menu.Mark(" -> ")
-	if err != nil {
-		return nil, err
-	}
+	dwin := stdscr.Derived(h-4, w-2, 3, 1)
 
 	mw := &MenuWindow{
-		stdscr: stdscr,
-		menu:   menu,
+		stdscr:    stdscr,
+		subWindow: dwin,
+		mark:      " -> ", // TODO: Maybe put in config?
 	}
 	return mw, nil
 }
 
-func (m *MenuWindow) Free() {
-	err := m.menu.Free()
-	if err != nil {
-		log.Println("error freeing menu:", err)
-	}
-}
-
-func (m *MenuWindow) run(items []string, title string) (string, error) {
-	gc.Cursor(0)
-	defer gc.Cursor(1)
+func (m *MenuWindow) drawBorderAndTitle(title string) {
 	m.stdscr.Erase()
-
-	// build the menu items
-	menuItems := make([]*gc.MenuItem, len(items))
-	for i, val := range items {
-		log.Println(val)
-		menuItems[i], _ = gc.NewItem(val, "")
-		defer menuItems[i].Free()
-	}
-
 	_, x := m.stdscr.MaxYX()
-	//m.stdscr.Resize(len(items)+4, x) // TODO: Needs fixing if it gets too big
-
-	err := m.menu.SetItems(menuItems)
-	if err != nil {
-		return "", fmt.Errorf("failed to set items: %w", err)
-	}
-
 	m.stdscr.Box(0, 0)
 	m.stdscr.MovePrint(1, (x/2)-(len(title)/2), title)
 	m.stdscr.MoveAddChar(2, 0, gc.ACS_LTEE)
 	m.stdscr.HLine(2, 1, gc.ACS_HLINE, x-2)
 	m.stdscr.MoveAddChar(2, x-1, gc.ACS_RTEE)
+	m.stdscr.Refresh()
+}
 
-	err = m.menu.Post()
-	if err != nil {
-		return "", err
+func (m *MenuWindow) drawMenu(items []string) {
+	m.subWindow.Erase()
+	m.subWindow.Move(0, 0)
+	y, x := m.subWindow.MaxYX()
+
+	if m.selected >= y+m.itemOffSet {
+		m.itemOffSet = m.selected - y + 1
+	} else if m.selected < m.itemOffSet {
+		m.itemOffSet = m.selected
 	}
 
-	defer m.menu.UnPost()
-	m.stdscr.Refresh()
+	for i, item := range items[m.itemOffSet:] {
+		if i >= y {
+			break
+		}
 
-	log.Println("Menu count:", m.menu.Count())
+		if len(item)+len(m.mark) >= x {
+			item = item[:x]
+		}
 
+		if m.selected == i+m.itemOffSet {
+			m.subWindow.Print(m.mark)
+			m.subWindow.AttrOn(gc.A_REVERSE)
+			m.subWindow.Println(item)
+			m.subWindow.AttrOff(gc.A_REVERSE)
+		} else {
+			prefixString := ""
+			for i := 0; i < len(m.mark); i++ { // TODO: Please tell me there is a better way
+				prefixString += " "
+			}
+			m.subWindow.Println(prefixString + item)
+		}
+	}
+	m.subWindow.Refresh()
+}
+
+func (m *MenuWindow) run(items []string, title string) (string, error) {
+	gc.Cursor(0)
+	defer gc.Cursor(1)
+
+	m.drawBorderAndTitle(title)
+	m.selected = 0
+	m.itemOffSet = 0
 	for {
-		gc.Update()
+		m.drawMenu(items)
 		ch := m.stdscr.GetChar()
 
 		switch ch {
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			current := m.menu.Current(nil)
-			return current.Name(), nil
+			return items[m.selected], nil
 		case gc.KEY_ESC:
 			return "", nil
 		case gc.KEY_DOWN:
-			m.menu.Driver(gc.REQ_DOWN)
+			m.selected = utils.Min(m.selected+1, len(items)-1)
 		case gc.KEY_UP:
-			m.menu.Driver(gc.REQ_UP)
+			m.selected = utils.Max(m.selected-1, 0)
 		}
 	}
 }
