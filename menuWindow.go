@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	gc "github.com/rthornton128/goncurses"
 	"log"
 )
@@ -27,6 +28,10 @@ func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 	}
 	log.Println("This is the I:", h)
 	dwin := stdscr.Derived(h-3, w-1, 3, 1)
+
+	my, mx := dwin.MaxYX()
+	log.Println("This is the maxY, maxX:", my, mx)
+
 	err = menu.SubWindow(dwin)
 	if err != nil {
 		return nil, err
@@ -68,7 +73,7 @@ func (m *MenuWindow) run(items []string, title string) (string, error) {
 
 	err := m.menu.SetItems(menuItems)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to set items: %w", err)
 	}
 
 	m.stdscr.Box(0, 0)

@@ -249,7 +249,8 @@ func (e *Editor) Init() {
 	e.transactions = NewTransactions()
 
 	width := e.maxX - 12
-	e.menuWindow, err = NewMenuWindow(0, utils.Max(e.maxX/2-(width/2), 4), e.maxY, width)
+	height := 20
+	e.menuWindow, err = NewMenuWindow(e.maxY/2-(height/2), utils.Max(e.maxX/2-(width/2), 4), height, width)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1063,9 +1064,13 @@ func (e *Editor) Run() error {
 				log.Println(err)
 			}
 		case 20: // CTRL + T
-			filenames := make([]string, len(e.recent))
+			filenames := make([]string, len(e.recent)-1)
 			i := 0
-			for filename, _ := range e.recent {
+			for filename, path := range e.recent {
+				if path == e.path {
+					continue
+				}
+
 				filenames[i] = filename
 				i++
 			}
@@ -1073,6 +1078,7 @@ func (e *Editor) Run() error {
 			selected, err := e.menuWindow.run(filenames, "Recent")
 			if err != nil {
 				e.debugLog(err)
+				break
 			}
 
 			if selected != "" && e.recent[selected] != e.path {
