@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -248,6 +249,7 @@ func (e *Editor) Init() {
 
 	e.transactions = NewTransactions()
 
+	// TODO: not hardcode these values
 	width := e.maxX - 12
 	height := 20
 	e.menuWindow, err = NewMenuWindow(e.maxY/2-(height/2), utils.Max(e.maxX/2-(width/2), 4), height, width)
@@ -969,15 +971,6 @@ func (e *Editor) Run() error {
 			e.inlinePosition = 0
 			e.moveYto(lineNr - 1)
 		case 15: // CTRL + O
-			//str := e.miniWindow.run(false, "open")
-			//if str == "" {
-			//	break
-			//}
-			//err := e.Load(str)
-			//if err != nil {
-			//	break
-			//}
-
 			currentPath := "."
 			for {
 				files, err := os.ReadDir(currentPath)
@@ -986,13 +979,27 @@ func (e *Editor) Run() error {
 					break
 				}
 
-				fileNames := make([]string, len(files))
-				for i, file := range files {
-					fileNames[i] = file.Name()
+				directoryNames := make([]string, 0)
+				fileNames := make([]string, 0)
+				for _, file := range files {
+					fileInfo, err := os.Stat(filepath.Join(currentPath, file.Name()))
+					if err != nil {
+						e.debugLog("failed to get stats for file/dir:", err)
+						continue
+					}
+
+					if fileInfo.IsDir() {
+						directoryNames = append(directoryNames, file.Name())
+					} else {
+						fileNames = append(fileNames, file.Name())
+					}
 				}
 
+				sort.Strings(directoryNames)
+				sort.Strings(fileNames)
+
 				e.draw()
-				selected, err := e.menuWindow.run(fileNames, currentPath)
+				selected, err := e.menuWindow.run(append(directoryNames, fileNames...), currentPath)
 				if err != nil {
 					e.debugLog(err)
 					break
