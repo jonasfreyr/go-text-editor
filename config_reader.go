@@ -43,6 +43,7 @@ type EditorConfig struct {
 	BackgroundColor ColorConfig `json:"background_color"`
 	LineNumberWidth int         `json:"line_number_width"`
 	TabWidth        int         `json:"tab_width"`
+	FolderColor     ColorConfig `json:"folder_color"`
 }
 
 func InitHomeFolder() {
@@ -96,6 +97,7 @@ func getDefaultEditorConfigValues() *EditorConfig {
 		BackgroundColor: ColorConfig{Color: [3]int{0, 0, 0}},
 		LineNumberWidth: 4,
 		TabWidth:        4,
+		FolderColor:     ColorConfig{Color: [3]int{104, 151, 187}},
 	}
 }
 

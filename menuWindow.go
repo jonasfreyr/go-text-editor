@@ -16,6 +16,11 @@ type MenuWindow struct {
 	mark string
 }
 
+type MenuItem struct {
+	label string
+	color [3]int
+}
+
 func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 	stdscr, err := gc.NewWindow(h, w, y, x)
 	if err != nil {
@@ -48,7 +53,7 @@ func (m *MenuWindow) drawBorderAndTitle(title string) {
 	m.stdscr.Refresh()
 }
 
-func (m *MenuWindow) drawMenu(items []string) {
+func (m *MenuWindow) drawMenu(items []MenuItem) {
 	m.subWindow.Erase()
 	m.subWindow.Move(0, 0)
 	y, x := m.subWindow.MaxYX()
@@ -64,27 +69,31 @@ func (m *MenuWindow) drawMenu(items []string) {
 			break
 		}
 
-		if len(item)+len(m.mark) >= x {
-			item = item[:x]
+		itemLabel := item.label
+
+		if len(itemLabel)+len(m.mark) >= x {
+			itemLabel = itemLabel[:x]
 		}
 
 		if m.selected == i+m.itemOffSet {
 			m.subWindow.Print(m.mark)
 			m.subWindow.AttrOn(gc.A_REVERSE)
-			m.subWindow.Println(item)
+			m.subWindow.Println(itemLabel)
 			m.subWindow.AttrOff(gc.A_REVERSE)
 		} else {
 			prefixString := ""
 			for i := 0; i < len(m.mark); i++ { // TODO: Please tell me there is a better way
 				prefixString += " "
 			}
-			m.subWindow.Println(prefixString + item)
+			EnableColor(m.subWindow, item.color)
+			m.subWindow.Println(prefixString + itemLabel)
+			DisableColor(m.subWindow, item.color)
 		}
 	}
 	m.subWindow.Refresh()
 }
 
-func (m *MenuWindow) run(items []string, title string) (string, error) {
+func (m *MenuWindow) run(items []MenuItem, title string) (string, error) {
 	gc.Cursor(0)
 	defer gc.Cursor(1)
 
@@ -97,7 +106,7 @@ func (m *MenuWindow) run(items []string, title string) (string, error) {
 
 		switch ch {
 		case gc.KEY_ENTER, gc.KEY_RETURN:
-			return items[m.selected], nil
+			return items[m.selected].label, nil
 		case gc.KEY_ESC:
 			return "", nil
 		case gc.KEY_DOWN:

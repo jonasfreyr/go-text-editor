@@ -30,9 +30,8 @@ type Editor struct {
 	printLineStartIndex int
 	printLinesIndex     int
 
-	lines    []string
-	lexer    *Lexer
-	colorMap map[string]int
+	lines []string
+	lexer *Lexer
 
 	selectedXStart, selectedYStart int
 	selectedXEnd, selectedYEnd     int
@@ -56,6 +55,57 @@ type Editor struct {
 
 var colorIndex = 1
 var DEBUG_MODE = false
+
+var colorMap map[string]int
+
+func SetColor(color [3]int) error {
+	// log.Println("Setting color", index, color)
+	err := gc.InitColor(int16(colorIndex), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
+	if err != nil {
+		return err
+	}
+
+	// fmt.Println("Setting pair")
+	err = gc.InitPair(int16(colorIndex), int16(colorIndex), -1)
+	if err != nil {
+		return err
+	}
+
+	key := utils.ColorToString(color)
+	colorMap[key] = colorIndex
+
+	colorIndex++
+
+	return nil
+}
+func DisableColor(scr *gc.Window, color [3]int) {
+	log.Println("color off")
+	key := utils.ColorToString(color)
+	colorIndex, ok := colorMap[key]
+	if !ok {
+		log.Println("invalid color key:", color)
+		return
+	}
+
+	err := scr.ColorOff(int16(colorIndex))
+	if err != nil {
+		log.Println(err)
+	}
+}
+func EnableColor(scr *gc.Window, color [3]int) {
+	log.Println("color on")
+	key := utils.ColorToString(color)
+	colorIndex, ok := colorMap[key]
+	if !ok {
+		log.Println("invalid color key:", color)
+		return
+	}
+
+	err := scr.ColorOn(int16(colorIndex))
+	if err != nil {
+		log.Println(err)
+	}
+}
 
 func (e *Editor) debugLog(args ...any) {
 	if !DEBUG_MODE {
@@ -95,32 +145,11 @@ func (e *Editor) debugLog(args ...any) {
 		log.Println(err)
 	}
 }
-func (e *Editor) setColor(color [3]int) error {
-	// log.Println("Setting color", index, color)
-	err := gc.InitColor(int16(colorIndex), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
-	if err != nil {
-		return err
-	}
-
-	// fmt.Println("Setting pair")
-	err = gc.InitPair(int16(colorIndex), int16(colorIndex), -1)
-	if err != nil {
-		return err
-	}
-
-	key := utils.ColorToString(color)
-	e.colorMap[key] = colorIndex
-
-	colorIndex++
-
-	return nil
-}
 func (e *Editor) setColors() error {
 	colorIndex = 1
-	e.colorMap = make(map[string]int)
-	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.config.LineNumberColor.Color,
+	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.config.LineNumberColor.Color, e.config.FolderColor.Color,
 		e.lexer.config.Keywords.Color, e.lexer.config.Comment.Color, e.lexer.config.Digits.Color, e.lexer.config.Strings.Color, e.lexer.config.Default.Color} {
-		err := e.setColor(colorArray)
+		err := SetColor(colorArray)
 		if err != nil {
 			return err
 		}
@@ -259,22 +288,6 @@ func (e *Editor) Init() {
 
 	e.recent = make(map[string]string)
 }
-func (e *Editor) disableColor(scr *gc.Window, color [3]int) {
-	key := utils.ColorToString(color)
-	colorIndex := e.colorMap[key]
-	err := scr.ColorOff(int16(colorIndex))
-	if err != nil {
-		log.Println(err)
-	}
-}
-func (e *Editor) enableColor(scr *gc.Window, color [3]int) {
-	key := utils.ColorToString(color)
-	colorIndex := e.colorMap[key]
-	err := scr.ColorOn(int16(colorIndex))
-	if err != nil {
-		log.Println(err)
-	}
-}
 func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	if startX == endX && startY == endY {
 		return false
@@ -298,11 +311,11 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 func (e *Editor) drawLineNumbers() {
 	start := e.printLinesIndex
 	e.lineNrscr.Erase()
-	e.enableColor(e.lineNrscr, e.config.LineNumberColor.Color)
+	EnableColor(e.lineNrscr, e.config.LineNumberColor.Color)
 	for i := 1; i <= e.maxY; i++ {
 		e.lineNrscr.MovePrint(i-1, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
 	}
-	e.disableColor(e.lineNrscr, e.config.LineNumberColor.Color)
+	DisableColor(e.lineNrscr, e.config.LineNumberColor.Color)
 	e.lineNrscr.Refresh()
 }
 func (e *Editor) accountForTabs(x, y int) int {
@@ -392,13 +405,13 @@ func (e *Editor) draw() {
 				token = token[:maxX-x]
 			}
 
-			e.enableColor(e.stdscr, t.color)
+			EnableColor(e.stdscr, t.color)
 			e.stdscr.Move(i, x)
 			for index, chr := range token {
 				highlighted := false
 				if e.isSelected(selectedXStart-e.printLineStartIndex, selectedXEnd-e.printLineStartIndex, selectedYStart, selectedYEnd, t.location.line, x+index) {
 					highlighted = true
-					e.disableColor(e.stdscr, t.color)
+					DisableColor(e.stdscr, t.color)
 					e.stdscr.AttrOn(gc.A_REVERSE)
 					if lastY != -1 && t.location.line != lastY {
 						e.selected += "\n"
@@ -409,12 +422,12 @@ func (e *Editor) draw() {
 				e.stdscr.AddChar(gc.Char(chr))
 
 				if highlighted {
-					e.enableColor(e.stdscr, t.color)
+					EnableColor(e.stdscr, t.color)
 					e.stdscr.AttrOff(gc.A_REVERSE)
 				}
 			}
 			// e.stdscr.Print(token)
-			e.disableColor(e.stdscr, t.color)
+			DisableColor(e.stdscr, t.color)
 		}
 		e.stdscr.Println()
 
@@ -997,8 +1010,15 @@ func (e *Editor) Run() error {
 				sort.Strings(directoryNames)
 				sort.Strings(fileNames)
 
+				menuItems := make([]MenuItem, 0)
+				for _, name := range directoryNames {
+					menuItems = append(menuItems, MenuItem{label: name, color: e.config.FolderColor.Color})
+				}
+				for _, name := range fileNames {
+					menuItems = append(menuItems, MenuItem{label: name, color: e.lexer.config.Default.Color})
+				}
 				e.draw()
-				selected, err := e.menuWindow.run(append(directoryNames, fileNames...), currentPath)
+				selected, err := e.menuWindow.run(menuItems, currentPath)
 				if err != nil {
 					e.debugLog(err)
 					break
@@ -1070,14 +1090,14 @@ func (e *Editor) Run() error {
 				log.Println(err)
 			}
 		case 20: // CTRL + T
-			filenames := make([]string, len(e.recent)-1)
+			filenames := make([]MenuItem, len(e.recent)-1)
 			i := 0
 			for filename, path := range e.recent {
 				if path == e.path {
 					continue
 				}
 
-				filenames[i] = filename
+				filenames[i] = MenuItem{label: filename, color: e.lexer.config.Default.Color}
 				i++
 			}
 
@@ -1295,6 +1315,8 @@ func main() {
 
 	log.SetOutput(f)
 	defer f.Close()
+
+	colorMap = make(map[string]int)
 
 	e := &Editor{}
 	e.Init()
