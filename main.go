@@ -19,6 +19,8 @@ import (
 type Editor struct {
 	stdscr    *gc.Window
 	lineNrscr *gc.Window
+	headerscr *gc.Window
+	// unsavedscr *gc.Window
 
 	maxX, maxY int
 
@@ -51,7 +53,9 @@ type Editor struct {
 
 	config *EditorConfig
 
-	recent map[string]string
+	recentToPaths map[string]string // names to paths
+	recent        []string
+	current       int
 }
 
 var DEBUG_MODE = false
@@ -113,7 +117,7 @@ func (e *Editor) Init() {
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 	if DEBUG_MODE {
-		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 0, e.config.LineNumberWidth)
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 2, e.config.LineNumberWidth)
 		if err != nil {
 			e.End()
 			log.Fatal(err)
@@ -129,18 +133,31 @@ func (e *Editor) Init() {
 		e.maxY, e.maxX = e.stdscr.MaxYX()
 
 	} else {
-		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX, 0, e.config.LineNumberWidth)
+		e.stdscr, err = gc.NewWindow(e.maxY, e.maxX-e.config.LineNumberWidth, 2, e.config.LineNumberWidth)
+		e.maxY, e.maxX = e.stdscr.MaxYX()
 		if err != nil {
 			e.End()
 			log.Fatal(err)
 		}
 	}
 
-	e.lineNrscr, err = gc.NewWindow(e.maxY, e.config.LineNumberWidth, 0, 0)
+	e.lineNrscr, err = gc.NewWindow(e.maxY, e.config.LineNumberWidth, 2, 0)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
 	}
+
+	e.headerscr, err = gc.NewWindow(2, e.maxX+e.config.LineNumberWidth, 0, 0)
+	if err != nil {
+		e.End()
+		log.Fatal(err)
+	}
+
+	//e.unsavedscr, err = gc.NewWindow(2, e.config.LineNumberWidth-1, 0, 0)
+	//if err != nil {
+	//	e.End()
+	//	log.Fatal(err)
+	//}
 
 	e.lexer, err = NewLexer()
 	if err != nil {
@@ -205,7 +222,8 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	e.recent = make(map[string]string)
+	e.recentToPaths = make(map[string]string)
+	e.recent = make([]string, 0)
 
 	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
 	if err != nil {
@@ -233,6 +251,36 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 
 	return (line >= startY && line <= endY) && (col >= startX && col < endX)
 }
+func (e *Editor) drawHeader() {
+	e.headerscr.Erase()
+	e.headerscr.HLine(1, 0, 0, e.maxX+e.config.LineNumberWidth-1)
+	e.headerscr.MoveAddChar(1, e.config.LineNumberWidth-1, gc.ACS_TTEE)
+	e.headerscr.Move(0, 0)
+
+	for _, name := range e.recent {
+		e.debugLog("drawing: ", name)
+		if e.recentToPaths[name] == e.path {
+			e.headerscr.AttrOn(gc.A_REVERSE)
+			e.headerscr.Print(name)
+			e.headerscr.AttrOff(gc.A_REVERSE)
+		} else {
+			e.headerscr.Print(name)
+		}
+		_, x := e.headerscr.CursorYX()
+		e.headerscr.VLine(0, x, 0, 1)
+		// e.headerscr.MoveAddChar(1, x, gc.ACS_BTEE)
+		e.headerscr.Move(0, x+1)
+		//e.headerscr.Print(" ")
+	}
+	e.headerscr.VLine(0, e.maxX+e.config.LineNumberWidth-1, 0, 1)
+
+	if DEBUG_MODE {
+		e.headerscr.MoveAddChar(1, e.maxX+e.config.LineNumberWidth-1, gc.ACS_RTEE)
+	} else {
+		e.headerscr.MoveAddChar(1, e.maxX+e.config.LineNumberWidth-1, gc.ACS_LRCORNER)
+	}
+	e.headerscr.Refresh()
+}
 func (e *Editor) drawLineNumbers() {
 	start := e.printLinesIndex
 	e.lineNrscr.Erase()
@@ -241,8 +289,19 @@ func (e *Editor) drawLineNumbers() {
 		e.lineNrscr.MovePrint(i-1, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
 	}
 	DisableColor(e.lineNrscr, e.config.LineNumberColor.Color)
+	e.lineNrscr.VLine(0, e.config.LineNumberWidth-1, 0, e.maxY)
 	e.lineNrscr.Refresh()
 }
+
+//func (e *Editor) drawUnsaved() {
+//	e.unsavedscr.Erase()
+//
+//	e.unsavedscr.HLine(1, 0, 0, e.config.LineNumberWidth)
+//	e.unsavedscr.MoveAddChar(1, e.config.LineNumberWidth, gc.ACS_TTEE)
+//
+//	e.unsavedscr.Refresh()
+//}
+
 func (e *Editor) accountForTabs(x, y int) int {
 	newX := 0
 
@@ -290,6 +349,7 @@ func (e *Editor) draw() {
 	}
 
 	e.drawLineNumbers()
+	// e.drawUnsaved()
 	e.stdscr.Erase()
 	e.selected = ""
 	lastY := -1
@@ -357,6 +417,10 @@ func (e *Editor) draw() {
 		e.stdscr.Println()
 
 	}
+	if DEBUG_MODE {
+		e.stdscr.VLine(0, e.maxX-1, 0, e.maxY)
+	}
+
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
 	if e.printLinesIndex <= e.y && e.y < e.printLinesIndex+e.maxY {
@@ -631,11 +695,19 @@ func (e *Editor) Load(filePath string) error {
 
 	}
 	e.lines = text
-
+	e.modified = false
 	e.draw()
 
 	filename := filepath.Base(filePath)
-	e.recent[filename] = filePath
+	if _, ok := e.recentToPaths[filename]; !ok {
+		e.recentToPaths[filename] = filePath
+		e.recent = append(e.recent, filename)
+		e.current = len(e.recent) - 1
+	} else {
+		e.current = utils.Index(e.recent, filename)
+	}
+
+	e.drawHeader()
 
 	return nil
 }
@@ -822,6 +894,26 @@ func (e *Editor) Run() error {
 			}
 
 			return nil
+		case 559: // ALT + Right
+			next := e.current + 1
+			if next >= len(e.recent) {
+				next = 0
+			}
+			err := e.Load(e.recentToPaths[e.recent[next]])
+			if err != nil {
+				e.debugLog(err)
+			}
+
+		case 544: // ALT + Left
+			next := e.current - 1
+			if next < 0 {
+				next = len(e.recent) - 1
+			}
+			err := e.Load(e.recentToPaths[e.recent[next]])
+			if err != nil {
+				e.debugLog(err)
+			}
+
 		case 562, 566: // CTRL + Shift + Right
 			e.ctrlMoveRight()
 			resetSelected = false
@@ -973,7 +1065,8 @@ func (e *Editor) Run() error {
 				}
 				break
 			}
-
+		case 17: // CTRL + Q Used for testing for now
+			e.popupWindow.pop("This is a very long message that is obviously too long")
 		case 18: // CTRL + R
 			for {
 				str1 := e.miniWindow.run(false, "replace(find)")
@@ -1018,9 +1111,9 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
-			filenames := make([]MenuItem, len(e.recent)-1)
+			filenames := make([]MenuItem, len(e.recentToPaths)-1)
 			i := 0
-			for filename, path := range e.recent {
+			for filename, path := range e.recentToPaths {
 				if path == e.path {
 					continue
 				}
@@ -1035,8 +1128,8 @@ func (e *Editor) Run() error {
 				break
 			}
 
-			if selected != "" && e.recent[selected] != e.path {
-				err = e.Load(e.recent[selected])
+			if selected != "" && e.recentToPaths[selected] != e.path {
+				err = e.Load(e.recentToPaths[selected])
 				if err != nil {
 					e.debugLog(err)
 

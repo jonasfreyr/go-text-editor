@@ -4,6 +4,7 @@ import (
 	"github.com/jonasfreyr/playground/utils"
 	gc "github.com/rthornton128/goncurses"
 	"log"
+	"strings"
 )
 
 type MenuWindow struct {
@@ -83,12 +84,8 @@ func (m *MenuWindow) drawMenu(items []MenuItem) {
 			DisableColor(m.subWindow, item.color)
 			m.subWindow.AttrOff(gc.A_REVERSE)
 		} else {
-			prefixString := ""
-			for i := 0; i < len(m.mark); i++ { // TODO: Please tell me there is a better way
-				prefixString += " "
-			}
 			EnableColor(m.subWindow, item.color)
-			m.subWindow.Println(prefixString + itemLabel)
+			m.subWindow.Println(strings.Repeat(" ", len(m.mark)) + itemLabel)
 			DisableColor(m.subWindow, item.color)
 		}
 	}

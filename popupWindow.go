@@ -6,6 +6,8 @@ import (
 
 type PopUpWindow struct {
 	stdscr *gc.Window
+
+	x, y int
 }
 
 func NewPopUpWindow(y, x, h, w int) (*PopUpWindow, error) {
@@ -19,7 +21,7 @@ func NewPopUpWindow(y, x, h, w int) (*PopUpWindow, error) {
 		return nil, err
 	}
 
-	return &PopUpWindow{stdscr: stdscr}, nil
+	return &PopUpWindow{stdscr: stdscr, x: x, y: y}, nil
 }
 
 func (pw *PopUpWindow) pop(message string) {
@@ -27,7 +29,7 @@ func (pw *PopUpWindow) pop(message string) {
 	defer gc.Cursor(1)
 	pw.stdscr.Erase()
 	pw.stdscr.Resize(3, len(message)+2)
-	// pw.stdscr.MoveWindow()
+	pw.stdscr.MoveWindow(pw.y, pw.x-len(message)/2)
 	y, x := pw.stdscr.MaxYX()
 	pw.stdscr.Box(0, 0)
 	pw.stdscr.MovePrint(1, 1, message)

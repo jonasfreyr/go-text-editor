@@ -95,7 +95,7 @@ func getDefaultEditorConfigValues() *EditorConfig {
 	return &EditorConfig{
 		LineNumberColor: ColorConfig{Color: [3]int{128, 128, 128}},
 		BackgroundColor: ColorConfig{Color: [3]int{0, 0, 0}},
-		LineNumberWidth: 4,
+		LineNumberWidth: 5,
 		TabWidth:        4,
 		FolderColor:     ColorConfig{Color: [3]int{104, 151, 187}},
 	}
