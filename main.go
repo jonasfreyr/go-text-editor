@@ -53,8 +53,8 @@ type Editor struct {
 
 	config *EditorConfig
 
-	recentToPaths map[string]string // names to paths
-	recent        []string
+	recentToNames map[string]string // paths to name
+	recent        []string          // List of paths
 	current       int
 }
 
@@ -222,7 +222,7 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	e.recentToPaths = make(map[string]string)
+	e.recentToNames = make(map[string]string)
 	e.recent = make([]string, 0)
 
 	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
@@ -257,14 +257,14 @@ func (e *Editor) drawHeader() {
 	e.headerscr.MoveAddChar(1, e.config.LineNumberWidth-1, gc.ACS_TTEE)
 	e.headerscr.Move(0, 0)
 
-	for _, name := range e.recent {
-		e.debugLog("drawing: ", name)
-		if e.recentToPaths[name] == e.path {
+	for _, path := range e.recent {
+		e.debugLog("drawing: ", path)
+		if path == e.path {
 			e.headerscr.AttrOn(gc.A_REVERSE)
-			e.headerscr.Print(name)
+			e.headerscr.Print(e.recentToNames[path])
 			e.headerscr.AttrOff(gc.A_REVERSE)
 		} else {
-			e.headerscr.Print(name)
+			e.headerscr.Print(e.recentToNames[path])
 		}
 		_, x := e.headerscr.CursorYX()
 		e.headerscr.VLine(0, x, 0, 1)
@@ -649,6 +649,8 @@ func (e *Editor) clampX() {
 	}
 }
 func (e *Editor) Load(filePath string) error {
+	filePath = strings.ToLower(filePath)
+
 	e.path = filePath
 
 	lines, err := os.ReadFile(filePath)
@@ -698,13 +700,13 @@ func (e *Editor) Load(filePath string) error {
 	e.modified = false
 	e.draw()
 
-	filename := filepath.Base(filePath)
-	if _, ok := e.recentToPaths[filename]; !ok {
-		e.recentToPaths[filename] = filePath
-		e.recent = append(e.recent, filename)
+	if _, ok := e.recentToNames[filePath]; !ok {
+		filename := filepath.Base(filePath)
+		e.recentToNames[filePath] = filename
+		e.recent = append(e.recent, filePath)
 		e.current = len(e.recent) - 1
 	} else {
-		e.current = utils.Index(e.recent, filename)
+		e.current = utils.Index(e.recent, filePath)
 	}
 
 	e.drawHeader()
@@ -899,7 +901,7 @@ func (e *Editor) Run() error {
 			if next >= len(e.recent) {
 				next = 0
 			}
-			err := e.Load(e.recentToPaths[e.recent[next]])
+			err := e.Load(e.recent[next])
 			if err != nil {
 				e.debugLog(err)
 			}
@@ -909,7 +911,7 @@ func (e *Editor) Run() error {
 			if next < 0 {
 				next = len(e.recent) - 1
 			}
-			err := e.Load(e.recentToPaths[e.recent[next]])
+			err := e.Load(e.recent[next])
 			if err != nil {
 				e.debugLog(err)
 			}
@@ -1111,31 +1113,31 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
-			filenames := make([]MenuItem, len(e.recentToPaths)-1)
-			i := 0
-			for filename, path := range e.recentToPaths {
-				if path == e.path {
-					continue
-				}
-
-				filenames[i] = MenuItem{label: filename, color: e.lexer.config.Default.Color}
-				i++
-			}
-
-			selected, err := e.menuWindow.run(filenames, "Recent")
-			if err != nil {
-				e.debugLog(err)
-				break
-			}
-
-			if selected != "" && e.recentToPaths[selected] != e.path {
-				err = e.Load(e.recentToPaths[selected])
-				if err != nil {
-					e.debugLog(err)
-
-				}
-				continue
-			}
+			//filenames := make([]MenuItem, len(e.recentToPaths)-1)
+			//i := 0
+			//for filename, path := range e.recentToPaths {
+			//	if path == e.path {
+			//		continue
+			//	}
+			//
+			//	filenames[i] = MenuItem{label: filename, color: e.lexer.config.Default.Color}
+			//	i++
+			//}
+			//
+			//selected, err := e.menuWindow.run(filenames, "Recent")
+			//if err != nil {
+			//	e.debugLog(err)
+			//	break
+			//}
+			//
+			//if selected != "" && e.recentToPaths[selected] != e.path {
+			//	err = e.Load(e.recentToPaths[selected])
+			//	if err != nil {
+			//		e.debugLog(err)
+			//
+			//	}
+			//	continue
+			//}
 
 		case 26: // CTRL + Z
 			e.undoTransaction()
