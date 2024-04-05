@@ -41,8 +41,9 @@ type Editor struct {
 
 	debugscr *gc.Window
 
-	miniWindow *MiniWindow
-	menuWindow *MenuWindow
+	miniWindow  *MiniWindow
+	menuWindow  *MenuWindow
+	popupWindow *PopUpWindow
 
 	transactions *Transactions
 
@@ -53,59 +54,7 @@ type Editor struct {
 	recent map[string]string
 }
 
-var colorIndex = 1
 var DEBUG_MODE = false
-
-var colorMap map[string]int
-
-func SetColor(color [3]int) error {
-	// log.Println("Setting color", index, color)
-	err := gc.InitColor(int16(colorIndex), int16(utils.MapTo1000(color[0])), int16(utils.MapTo1000(color[1])), int16(utils.MapTo1000(color[2])))
-	if err != nil {
-		return err
-	}
-
-	// fmt.Println("Setting pair")
-	err = gc.InitPair(int16(colorIndex), int16(colorIndex), -1)
-	if err != nil {
-		return err
-	}
-
-	key := utils.ColorToString(color)
-	colorMap[key] = colorIndex
-
-	colorIndex++
-
-	return nil
-}
-func DisableColor(scr *gc.Window, color [3]int) {
-	log.Println("color off")
-	key := utils.ColorToString(color)
-	colorIndex, ok := colorMap[key]
-	if !ok {
-		log.Println("invalid color key:", color)
-		return
-	}
-
-	err := scr.ColorOff(int16(colorIndex))
-	if err != nil {
-		log.Println(err)
-	}
-}
-func EnableColor(scr *gc.Window, color [3]int) {
-	log.Println("color on")
-	key := utils.ColorToString(color)
-	colorIndex, ok := colorMap[key]
-	if !ok {
-		log.Println("invalid color key:", color)
-		return
-	}
-
-	err := scr.ColorOn(int16(colorIndex))
-	if err != nil {
-		log.Println(err)
-	}
-}
 
 func (e *Editor) debugLog(args ...any) {
 	if !DEBUG_MODE {
@@ -145,39 +94,7 @@ func (e *Editor) debugLog(args ...any) {
 		log.Println(err)
 	}
 }
-func (e *Editor) setColors() error {
-	colorIndex = 1
-	for _, colorArray := range [][3]int{e.lexer.config.Literals.Color, e.lexer.config.BuiltIns.Color, e.lexer.config.Types.Color, e.config.LineNumberColor.Color, e.config.FolderColor.Color,
-		e.lexer.config.Keywords.Color, e.lexer.config.Comment.Color, e.lexer.config.Digits.Color, e.lexer.config.Strings.Color, e.lexer.config.Default.Color} {
-		err := SetColor(colorArray)
-		if err != nil {
-			return err
-		}
-	}
 
-	return nil
-}
-func (e *Editor) initColor() error {
-	if !gc.HasColors() {
-		return nil
-	}
-
-	err := gc.StartColor()
-	if err != nil {
-		return err
-	}
-
-	err = gc.UseDefaultColors()
-	if err != nil {
-		return err
-	}
-
-	//err = e.setColors()
-	//if err != nil {
-	//	return err
-	//}
-	return nil
-}
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
@@ -231,10 +148,9 @@ func (e *Editor) Init() {
 		log.Fatal("failed to load lexer: ", err)
 	}
 
-	err = e.initColor()
+	err = InitColor()
 	if err != nil {
-		e.End()
-		log.Fatal(err)
+		log.Println("failed to initialize color:", err)
 	}
 
 	gc.Echo(false)
@@ -260,11 +176,13 @@ func (e *Editor) Init() {
 
 	mw, err := gc.NewWindow(1, e.maxX, e.maxY-1, 4)
 	if err != nil {
+		e.End()
 		log.Fatal(err)
 	}
 
 	err = mw.Keypad(true)
 	if err != nil {
+		e.End()
 		log.Fatal(err)
 	}
 
@@ -283,10 +201,17 @@ func (e *Editor) Init() {
 	height := 20
 	e.menuWindow, err = NewMenuWindow(e.maxY/2-(height/2), utils.Max(e.maxX/2-(width/2), 4), height, width)
 	if err != nil {
+		e.End()
 		log.Fatal(err)
 	}
 
 	e.recent = make(map[string]string)
+
+	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
+	if err != nil {
+		e.End()
+		log.Fatal(err)
+	}
 }
 func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	if startX == endX && startY == endY {
@@ -675,10 +600,10 @@ func (e *Editor) Load(filePath string) error {
 			e.debugLog(err)
 		}
 
-		err = e.setColors()
-		if err != nil {
-			e.debugLog(err)
-		}
+		//err = e.setColors()
+		//if err != nil {
+		//	e.debugLog(err)
+		//}
 	}
 
 	e.selectedXStart, e.selectedYStart, e.selectedXEnd, e.selectedYEnd = 0, 0, 0, 0
@@ -1088,6 +1013,9 @@ func (e *Editor) Run() error {
 			err := e.Save(e.path)
 			if err != nil {
 				log.Println(err)
+				e.popupWindow.pop("Failed to save!")
+			} else {
+				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
 			filenames := make([]MenuItem, len(e.recent)-1)

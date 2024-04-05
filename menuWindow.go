@@ -78,7 +78,9 @@ func (m *MenuWindow) drawMenu(items []MenuItem) {
 		if m.selected == i+m.itemOffSet {
 			m.subWindow.Print(m.mark)
 			m.subWindow.AttrOn(gc.A_REVERSE)
+			EnableColor(m.subWindow, item.color)
 			m.subWindow.Println(itemLabel)
+			DisableColor(m.subWindow, item.color)
 			m.subWindow.AttrOff(gc.A_REVERSE)
 		} else {
 			prefixString := ""
