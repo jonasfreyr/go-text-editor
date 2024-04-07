@@ -27,7 +27,7 @@ func InitColor() error {
 	}
 
 	HAS_COLOR = true
-
+	colorMap = make(map[string]int)
 	return nil
 }
 

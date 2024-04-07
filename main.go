@@ -49,13 +49,13 @@ type Editor struct {
 
 	transactions *Transactions
 
-	modified bool
-
 	config *EditorConfig
 
-	recentToNames map[string]string // paths to name
-	recent        []string          // List of paths
-	current       int
+	openPathsToNames map[string]string // paths to name
+	openedFiles      []string          // List of paths
+	modified         map[string]bool   // paths to bool
+	current          int
+	tempFilePaths    map[string]string // paths to temp file paths
 }
 
 var DEBUG_MODE = false
@@ -222,8 +222,10 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	e.recentToNames = make(map[string]string)
-	e.recent = make([]string, 0)
+	e.openPathsToNames = make(map[string]string)
+	e.openedFiles = make([]string, 0)
+	e.modified = make(map[string]bool)
+	e.tempFilePaths = make(map[string]string)
 
 	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
 	if err != nil {
@@ -257,14 +259,19 @@ func (e *Editor) drawHeader() {
 	e.headerscr.MoveAddChar(1, e.config.LineNumberWidth-1, gc.ACS_TTEE)
 	e.headerscr.Move(0, 0)
 
-	for _, path := range e.recent {
-		e.debugLog("drawing: ", path)
+	for _, path := range e.openedFiles {
+		//e.debugLog("drawing: ", path)
+		prefix := ""
+		if e.modified[path] {
+			prefix = "*"
+		}
+
 		if path == e.path {
 			e.headerscr.AttrOn(gc.A_REVERSE)
-			e.headerscr.Print(e.recentToNames[path])
+			e.headerscr.Print(prefix + e.openPathsToNames[path])
 			e.headerscr.AttrOff(gc.A_REVERSE)
 		} else {
-			e.headerscr.Print(e.recentToNames[path])
+			e.headerscr.Print(prefix + e.openPathsToNames[path])
 		}
 		_, x := e.headerscr.CursorYX()
 		e.headerscr.VLine(0, x, 0, 1)
@@ -292,15 +299,6 @@ func (e *Editor) drawLineNumbers() {
 	e.lineNrscr.VLine(0, e.config.LineNumberWidth-1, 0, e.maxY)
 	e.lineNrscr.Refresh()
 }
-
-//func (e *Editor) drawUnsaved() {
-//	e.unsavedscr.Erase()
-//
-//	e.unsavedscr.HLine(1, 0, 0, e.config.LineNumberWidth)
-//	e.unsavedscr.MoveAddChar(1, e.config.LineNumberWidth, gc.ACS_TTEE)
-//
-//	e.unsavedscr.Refresh()
-//}
 
 func (e *Editor) accountForTabs(x, y int) int {
 	newX := 0
@@ -347,8 +345,8 @@ func (e *Editor) draw() {
 	if err != nil {
 		e.debugLog(err)
 	}
-
 	e.drawLineNumbers()
+	e.drawHeader()
 	// e.drawUnsaved()
 	e.stdscr.Erase()
 	e.selected = ""
@@ -474,7 +472,7 @@ func (e *Editor) removeText(y, x, num int) string {
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
-	e.modified = true
+	e.modified[e.path] = true
 
 	// TODO: will needs some fixing to work with nums larger than 1
 	if x == 0 {
@@ -520,7 +518,7 @@ func (e *Editor) insertText(y, x int, text string) (int, int) {
 	return y, x
 }
 func (e *Editor) insert(y, x int, text string) {
-	e.modified = true
+	e.modified[e.path] = true
 
 	y, x = e.insertText(y, x, text)
 	a := Action{
@@ -607,7 +605,7 @@ func (e *Editor) deleteLinesText(y, num int) (text string) {
 	before := time.Now()
 	defer e.debugLog(time.Since(before))
 
-	e.modified = true
+	e.modified[e.path] = true
 	if len(e.lines) == 1 {
 		text = e.lines[y]
 		e.lines[y] = ""
@@ -649,13 +647,39 @@ func (e *Editor) clampX() {
 	}
 }
 func (e *Editor) Load(filePath string) error {
-	filePath = strings.ToLower(filePath)
+	if e.path != "" && e.modified[e.path] {
+		if _, ok := e.tempFilePaths[e.path]; !ok {
+			tempFile, err := os.CreateTemp("", e.openPathsToNames[e.path])
+			if err != nil {
+				return err
+			}
+			e.tempFilePaths[e.path] = tempFile.Name()
 
+		}
+
+		data := []byte(strings.Join(e.lines, "\n"))
+		err := os.WriteFile(e.tempFilePaths[e.path], data, 0666)
+		if err != nil {
+			return err
+		}
+	}
+
+	filePath = strings.ToLower(filePath)
 	e.path = filePath
 
-	lines, err := os.ReadFile(filePath)
-	if err != nil {
-		return err
+	var lines []byte
+	var err error
+	if modified, ok := e.modified[e.path]; ok && modified {
+		lines, err = os.ReadFile(e.tempFilePaths[e.path])
+		if err != nil {
+			return err
+		}
+	} else {
+		lines, err = os.ReadFile(filePath)
+		e.modified[e.path] = false
+		if err != nil {
+			return err
+		}
 	}
 
 	fileExtension := filepath.Ext(filePath)
@@ -697,19 +721,17 @@ func (e *Editor) Load(filePath string) error {
 
 	}
 	e.lines = text
-	e.modified = false
-	e.draw()
 
-	if _, ok := e.recentToNames[filePath]; !ok {
+	if _, ok := e.openPathsToNames[filePath]; !ok {
 		filename := filepath.Base(filePath)
-		e.recentToNames[filePath] = filename
-		e.recent = append(e.recent, filePath)
-		e.current = len(e.recent) - 1
+		e.openPathsToNames[filePath] = filename
+		e.openedFiles = append(e.openedFiles, filePath)
+		e.current = len(e.openedFiles) - 1
 	} else {
-		e.current = utils.Index(e.recent, filePath)
+		e.current = utils.Index(e.openedFiles, filePath)
 	}
 
-	e.drawHeader()
+	e.draw()
 
 	return nil
 }
@@ -887,7 +909,14 @@ func (e *Editor) Run() error {
 		// TODO: Make CTRL and Shift bools instead, how to do release tho?
 		switch key {
 		case gc.KEY_ESC:
-			if e.modified {
+			anyUnsaved := false
+			for _, modified := range e.modified {
+				if modified {
+					anyUnsaved = true
+					break
+				}
+			}
+			if anyUnsaved {
 				str := e.miniWindow.run(true, "unsaved, are you sure? (y/n)")
 				if strings.ToLower(str) == "y" {
 					return nil
@@ -896,22 +925,22 @@ func (e *Editor) Run() error {
 			}
 
 			return nil
-		case 559: // ALT + Right
+		case 559, 563: // ALT + Right
 			next := e.current + 1
-			if next >= len(e.recent) {
+			if next >= len(e.openedFiles) {
 				next = 0
 			}
-			err := e.Load(e.recent[next])
+			err := e.Load(e.openedFiles[next])
 			if err != nil {
 				e.debugLog(err)
 			}
 
-		case 544: // ALT + Left
+		case 544, 548: // ALT + Left
 			next := e.current - 1
 			if next < 0 {
-				next = len(e.recent) - 1
+				next = len(e.openedFiles) - 1
 			}
-			err := e.Load(e.recent[next])
+			err := e.Load(e.openedFiles[next])
 			if err != nil {
 				e.debugLog(err)
 			}
@@ -1304,7 +1333,7 @@ func (e *Editor) Run() error {
 	}
 }
 func (e *Editor) Save(filepath string) error {
-	e.modified = false
+	e.modified[e.path] = false
 	data := []byte(strings.Join(e.lines, "\n"))
 	err := os.WriteFile(filepath, data, 0666)
 	if err != nil {
@@ -1338,8 +1367,6 @@ func main() {
 
 	log.SetOutput(f)
 	defer f.Close()
-
-	colorMap = make(map[string]int)
 
 	e := &Editor{}
 	e.Init()
