@@ -602,16 +602,12 @@ func (e *Editor) addLines(y int, lines []string) {
 	e.lines = newList
 }
 func (e *Editor) deleteLinesText(y, num int) (text string) {
-	before := time.Now()
-	defer e.debugLog(time.Since(before))
-
 	e.modified[e.path] = true
 	if len(e.lines) == 1 {
 		text = e.lines[y]
 		e.lines[y] = ""
 	} else {
 		deletedLines := e.lines[y:utils.Min(y+num, len(e.lines))]
-		e.debugLog("lines len:", len(deletedLines))
 
 		text = strings.Join(deletedLines, "\n")
 		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
@@ -624,11 +620,13 @@ func (e *Editor) deleteLines(y, num int) {
 		return
 	}
 
+	colPos := len(e.lines[y])
+
 	text := e.deleteLinesText(y, num)
 
 	ta := Action{
 		location: Location{
-			col:  len(e.lines[y]),
+			col:  colPos,
 			line: y,
 		},
 		actionType: DELETE_LINE,
@@ -737,7 +735,7 @@ func (e *Editor) Load(filePath string) error {
 }
 func (e *Editor) moveY(delta int) {
 	e.y = utils.Min(utils.Max(e.y+delta, 0), len(e.lines)-1)
-
+	e.debugLog(e.y, len(e.lines))
 	e.clampX()
 
 	if e.y-e.printLinesIndex > e.maxY-e.config.TabWidth {
@@ -986,9 +984,10 @@ func (e *Editor) Run() error {
 				panic(err)
 			}
 		case 4: // CTRL + D
+			e.debugLog("Before y, len", e.y, len(e.lines))
 			e.deleteLines(e.y, 1)
-			e.y = utils.Min(utils.Max(len(e.lines)-1, 0), utils.Max(e.y-1, 0))
-			e.clampX()
+			e.moveY(0)
+			e.debugLog("After y, len", e.y, len(e.lines))
 		case 6: // CTRL + F
 			for {
 				str := e.miniWindow.run(false, "find")
