@@ -1,5 +1,5 @@
 syntax = "proto3";
-This line is also unsaved bozo
+
 package test;
 
 import "some/random/import.proto";

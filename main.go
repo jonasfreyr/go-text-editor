@@ -51,11 +51,13 @@ type Editor struct {
 
 	config *EditorConfig
 
+	// TODO: Maybe collect all these into a struct
 	openPathsToNames map[string]string // paths to name
 	openedFiles      []string          // List of paths
 	modified         map[string]bool   // paths to bool
 	current          int
 	tempFilePaths    map[string]string // paths to temp file paths
+	tempFilePos      map[string]Location
 }
 
 var DEBUG_MODE = false
@@ -226,6 +228,7 @@ func (e *Editor) Init() {
 	e.openedFiles = make([]string, 0)
 	e.modified = make(map[string]bool)
 	e.tempFilePaths = make(map[string]string)
+	e.tempFilePos = make(map[string]Location)
 
 	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
 	if err != nil {
@@ -261,17 +264,17 @@ func (e *Editor) drawHeader() {
 
 	for _, path := range e.openedFiles {
 		//e.debugLog("drawing: ", path)
-		prefix := ""
+		name := e.openPathsToNames[path]
 		if e.modified[path] {
-			prefix = "*"
+			name = "*" + name
 		}
 
 		if path == e.path {
 			e.headerscr.AttrOn(gc.A_REVERSE)
-			e.headerscr.Print(prefix + e.openPathsToNames[path])
+			e.headerscr.Print(name)
 			e.headerscr.AttrOff(gc.A_REVERSE)
 		} else {
-			e.headerscr.Print(prefix + e.openPathsToNames[path])
+			e.headerscr.Print(name)
 		}
 		_, x := e.headerscr.CursorYX()
 		e.headerscr.VLine(0, x, 0, 1)
@@ -660,8 +663,9 @@ func (e *Editor) Load(filePath string) error {
 		if err != nil {
 			return err
 		}
-	}
 
+	}
+	e.tempFilePos[e.path] = Location{col: e.x, line: e.y}
 	filePath = strings.ToLower(filePath)
 	e.path = filePath
 
@@ -687,18 +691,10 @@ func (e *Editor) Load(filePath string) error {
 		if err != nil {
 			e.debugLog(err)
 		}
-
-		//err = e.setColors()
-		//if err != nil {
-		//	e.debugLog(err)
-		//}
 	}
 
 	e.selectedXStart, e.selectedYStart, e.selectedXEnd, e.selectedYEnd = 0, 0, 0, 0
 	e.inlinePosition = 0
-
-	e.moveXto(0)
-	e.moveYto(0)
 
 	text := make([]string, 1)
 	lineNr := 0
@@ -719,6 +715,16 @@ func (e *Editor) Load(filePath string) error {
 
 	}
 	e.lines = text
+
+	if loc, ok := e.tempFilePos[e.path]; ok {
+		e.moveYto(loc.line)
+		e.moveXto(loc.col)
+		e.debugLog("loc:", loc.col, loc.line)
+
+	} else {
+		e.moveXto(0)
+		e.moveYto(0)
+	}
 
 	if _, ok := e.openPathsToNames[filePath]; !ok {
 		filename := filepath.Base(filePath)
@@ -1138,6 +1144,7 @@ func (e *Editor) Run() error {
 				log.Println(err)
 				e.popupWindow.pop("Failed to save!")
 			} else {
+				e.drawHeader()
 				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
