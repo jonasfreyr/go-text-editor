@@ -52,6 +52,8 @@ type Editor struct {
 
 	config *EditorConfig
 
+	terminalLines []string
+
 	// TODO: Maybe collect all these into a struct
 	openPathsToNames map[string]string   // paths to name
 	openedFiles      []string            // List of paths
@@ -63,35 +65,20 @@ type Editor struct {
 
 var DEBUG_MODE = false
 
-func (e *Editor) debugLog(args ...any) {
-	if !DEBUG_MODE {
-		return
-	}
-
-	// e.debugscr.Border(gc.ACS_VLINE, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS)
-
+func (e *Editor) drawTerminal() {
 	err := gc.Cursor(0)
 	if err != nil {
 		log.Println(err)
 	}
 
-	y, _ := e.terminalscr.CursorYX()
-	if y >= e.maxY {
-		e.terminalscr.Scroll(y - (e.maxY))
-	}
-
-	logString := ""
-	for i, arg := range args {
-		if i > 0 {
-			e.terminalscr.Print(" ")
-			logString += " "
+	if e.terminalOpened {
+		e.terminalscr.Erase()
+		y, _ := e.terminalscr.MaxYX()
+		for i, line := range e.terminalLines {
+			e.terminalscr.MovePrint(y-i-1, 0, line)
 		}
-		e.terminalscr.Print(arg)
-		logString += fmt.Sprint(arg)
+		e.terminalscr.Refresh()
 	}
-	e.terminalscr.Println()
-	log.Println(logString)
-	e.terminalscr.Refresh()
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
@@ -99,6 +86,40 @@ func (e *Editor) debugLog(args ...any) {
 	err = gc.Cursor(1)
 	if err != nil {
 		log.Println(err)
+	}
+}
+
+func (e *Editor) outputToTerminal(args ...any) {
+	logString := ""
+	for i, arg := range args {
+		if i > 0 {
+			logString += " "
+		}
+		logString += fmt.Sprint(arg)
+	}
+
+	logArray := strings.Split(logString, "\n")
+	e.terminalLines = append(logArray, e.terminalLines...)
+
+	if len(e.terminalLines) > e.maxY {
+		e.terminalLines = e.terminalLines[:e.maxY]
+	}
+
+	e.drawTerminal()
+}
+
+func (e *Editor) debugLog(args ...any) {
+	logString := ""
+	for i, arg := range args {
+		if i > 0 {
+			logString += " "
+		}
+		logString += fmt.Sprint(arg)
+	}
+	log.Println(logString)
+
+	if DEBUG_MODE {
+		e.outputToTerminal(logString)
 	}
 }
 
@@ -221,7 +242,7 @@ func (e *Editor) Init() {
 	}
 
 	e.lines = make([]string, 1)
-
+	e.terminalLines = make([]string, 0)
 	e.transactions = NewTransactions()
 
 	// TODO: not hardcode these values
@@ -266,7 +287,7 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	return (line >= startY && line <= endY) && (col >= startX && col < endX)
 }
 func (e *Editor) drawHeader() {
-	_, maxX := e.headerscr.MaxYX()
+	maxY, maxX := e.headerscr.MaxYX()
 
 	e.headerscr.Erase()
 	e.headerscr.HLine(1, 0, 0, maxX)
@@ -296,9 +317,8 @@ func (e *Editor) drawHeader() {
 	e.headerscr.VLine(0, maxX, 0, 1)
 
 	if e.terminalOpened {
+		e.headerscr.VLine(0, maxX-1, 0, maxY)
 		e.headerscr.MoveAddChar(1, maxX-1, gc.ACS_RTEE)
-	} else {
-		e.headerscr.MoveAddChar(1, maxX-1, gc.ACS_LRCORNER)
 	}
 	e.headerscr.Refresh()
 }
@@ -944,6 +964,8 @@ func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
 
+		before := time.Now()
+
 		//before := time.Now()
 		e.debugLog(key, gc.KeyString(key))
 
@@ -1192,6 +1214,9 @@ func (e *Editor) Run() error {
 			}
 		case 20: // CTRL + T
 			e.resizeWindows()
+			if e.terminalOpened {
+				e.drawTerminal()
+			}
 			//filenames := make([]MenuItem, len(e.recentToPaths)-1)
 			//i := 0
 			//for filename, path := range e.recentToPaths {
@@ -1379,6 +1404,7 @@ func (e *Editor) Run() error {
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
 		//e.debugLog("run took:", time.Since(before))
 		e.draw()
+		e.debugLog("Total time:", time.Since(before))
 		e.transactions.submit(beforeY, beforeX)
 	}
 }
