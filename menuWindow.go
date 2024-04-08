@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/jonasfreyr/playground/utils"
 	gc "github.com/rthornton128/goncurses"
 	"log"
 	"strings"
@@ -109,9 +108,16 @@ func (m *MenuWindow) run(items []MenuItem, title string) (string, error) {
 		case gc.KEY_ESC:
 			return "", nil
 		case gc.KEY_DOWN:
-			m.selected = utils.Min(m.selected+1, len(items)-1)
+			m.selected++
+
+			if m.selected > len(items)-1 {
+				m.selected = 0
+			}
 		case gc.KEY_UP:
-			m.selected = utils.Max(m.selected-1, 0)
+			m.selected--
+			if m.selected < 0 {
+				m.selected = len(items) - 1
+			}
 		}
 	}
 }

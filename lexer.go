@@ -25,7 +25,7 @@ type Token struct {
 var TabWidth int
 
 func (t *Token) Length() int {
-	if t.lexeme == "\n" {
+	if t.lexeme == "\t" {
 		return TabWidth - (t.location.col)%TabWidth
 	}
 

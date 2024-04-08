@@ -638,14 +638,28 @@ func (e *Editor) deleteLines(y, num int) {
 
 	e.transactions.addAction(ta)
 }
-func (e *Editor) clampX() {
-	line := e.lines[e.y]
 
-	if e.inlinePosition > len(line) {
-		e.x = len(line)
-	} else {
-		e.x = e.inlinePosition
+func (e *Editor) findNewX(x, y int) int {
+	tokens := e.lexer.Tokenize(e.lines[y])[0]
+	stringIndex := 0
+	for _, token := range tokens {
+		if token.location.col <= x && x <= token.location.col+token.Length() {
+			if token.lexeme == "\t" {
+				if x-token.location.col > token.Length()/2 {
+					return stringIndex + 1
+				}
+				return stringIndex
+			}
+
+			return stringIndex + x - token.location.col
+		}
+		stringIndex += len(token.lexeme)
 	}
+	return stringIndex
+}
+
+func (e *Editor) clampX() {
+	e.x = e.findNewX(e.inlinePosition, e.y)
 }
 func (e *Editor) Load(filePath string) error {
 	if e.path != "" && e.modified[e.path] {
@@ -1323,7 +1337,7 @@ func (e *Editor) Run() error {
 		}
 
 		if updateLengthIndex {
-			e.inlinePosition = e.x
+			e.inlinePosition = e.accountForTabs(e.x, e.y)
 		}
 		if resetSelected {
 			e.selectedXStart = e.x
