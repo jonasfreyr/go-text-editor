@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -150,39 +151,48 @@ func (e *Editor) debugLog(args ...any) {
 }
 
 func (e *Editor) initTerminal() error {
-	cmd := exec.Command("sh")
+	// Create the command.
+	cmd := exec.Command("cat")
 
-	var err error
-	e.cmdIn, err = cmd.StdinPipe()
+	// Get a pipe to the command's standard input.
+	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		fmt.Printf("Error obtaining stdin: %s\n", err)
+		return nil
 	}
 
+	// Get a pipe to the command's standard output.
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		fmt.Printf("Error obtaining stdout: %s\n", err)
+		return nil
 	}
 
-	//go func() {
-	//	defer stdin.Close()
-	//	io.WriteString(stdin, "ls")
-	//}()
+	// Start the command.
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("Error starting command: %s\n", err)
+		return nil
+	}
 
-	//out, err := cmd.CombinedOutput()
-	//if err != nil {
-	//	return err
-	//}
+	// Write something to the command's stdin.
+	message := "Hello, World!\n"
+	_, err = io.WriteString(stdin, message)
+	if err != nil {
+		fmt.Printf("Error writing to stdin: %s\n", err)
+		return nil
+	}
+	stdin.Close() // Important to close the stdin or the process might hang waiting for more input
 
-	//cmd.Start()
+	// Read from the command's stdout.
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		fmt.Printf("Output from command: %s\n", scanner.Text())
+	}
 
-	//scanner := bufio.NewScanner(stdout)
-	//scanner.Scan()
-	//out := scanner.Text()
-
-	//e.debugLog(string(out))
-	e.cmd = cmd
-
-	go e.captureTerminalOutput(stdout)
+	// Wait for the command to finish.
+	if err := cmd.Wait(); err != nil {
+		fmt.Printf("Command finished with error: %s\n", err)
+	}
 
 	return nil
 }
