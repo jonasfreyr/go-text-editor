@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"strings"
+	"path/filepath"
 )
 
 func JoinPath(paths ...string) string {
-	return strings.Join(paths, "/")
+	return filepath.Join(paths...)
 }
 
 var HOME_PATH = "."
@@ -51,6 +51,10 @@ func InitHomeFolder() {
 	if err == nil && !DEBUG_MODE {
 		HOME_PATH = homeDir
 	}
+}
+
+func GetGimPath() string {
+	return JoinPath(HOME_PATH, GIM_PATH)
 }
 
 func getHomePath() string {

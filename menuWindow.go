@@ -24,11 +24,12 @@ type MenuItem struct {
 func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 	stdscr, err := gc.NewWindow(h, w, y, x)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+
 	err = stdscr.Keypad(true)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	log.Println("This is the I:", h)

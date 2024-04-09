@@ -14,6 +14,22 @@ type MiniWindow struct {
 	texts map[string]string
 }
 
+func NewMiniWindow(y, x, h, w int) (*MiniWindow, error) {
+	stdscr, err := gc.NewWindow(h, w, y, x)
+	if err != nil {
+		return nil, err
+		//log.Fatal(err)
+	}
+	err = stdscr.Keypad(true)
+	if err != nil {
+		return nil, err
+		//log.Fatal(err)
+	}
+
+	return &MiniWindow{width: w, stdscr: stdscr, texts: make(map[string]string)}, nil
+
+}
+
 func (w *MiniWindow) draw(label string) {
 	w.stdscr.Erase()
 	// w.stdscr.Border(gc.ACS_VLINE, gc.ACS_VLINE, gc.ACS_HLINE, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS)

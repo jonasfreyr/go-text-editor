@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -44,15 +45,18 @@ type Editor struct {
 	terminalscr    *gc.Window
 	terminalOpened bool
 
-	miniWindow  *MiniWindow
-	menuWindow  *MenuWindow
-	popupWindow *PopUpWindow
+	miniWindow     *MiniWindow
+	menuWindow     *MenuWindow
+	terminalWindow *MiniWindow
+	popupWindow    *PopUpWindow
 
 	transactions *Transactions
 
 	config *EditorConfig
 
 	terminalLines []string
+	cmdIn         io.WriteCloser
+	cmd           *exec.Cmd
 
 	// TODO: Maybe collect all these into a struct
 	openPathsToNames map[string]string   // paths to name
@@ -64,6 +68,28 @@ type Editor struct {
 }
 
 var DEBUG_MODE = false
+
+func (e *Editor) captureTerminalOutput(cmdOut io.ReadCloser) {
+	for {
+		output, err := io.ReadAll(cmdOut)
+		if err != nil {
+			e.debugLog(err)
+			return
+		}
+		e.outputToTerminal(string(output))
+	}
+}
+
+func (e *Editor) executeTerminalCommand(command string, args ...string) {
+	command = strings.Join(append([]string{command}, args...), " ")
+
+	_, err := io.WriteString(e.cmdIn, command)
+	if err != nil {
+		e.debugLog(err)
+	}
+
+	e.cmd.Start()
+}
 
 func (e *Editor) drawTerminal() {
 	err := gc.Cursor(0)
@@ -123,6 +149,43 @@ func (e *Editor) debugLog(args ...any) {
 	}
 }
 
+func (e *Editor) initTerminal() error {
+	cmd := exec.Command("sh")
+
+	var err error
+	e.cmdIn, err = cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	//go func() {
+	//	defer stdin.Close()
+	//	io.WriteString(stdin, "ls")
+	//}()
+
+	//out, err := cmd.CombinedOutput()
+	//if err != nil {
+	//	return err
+	//}
+
+	//cmd.Start()
+
+	//scanner := bufio.NewScanner(stdout)
+	//scanner.Scan()
+	//out := scanner.Text()
+
+	//e.debugLog(string(out))
+	e.cmd = cmd
+
+	go e.captureTerminalOutput(stdout)
+
+	return nil
+}
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
@@ -163,7 +226,8 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	e.terminalscr, err = gc.NewWindow(e.maxY, e.maxX*2/5-e.config.LineNumberWidth, 0, e.maxX*3/5+e.config.LineNumberWidth+1)
+	terminalXpos := e.maxX*3/5 + e.config.LineNumberWidth + 1
+	e.terminalscr, err = gc.NewWindow(e.maxY-1, e.maxX*2/5-e.config.LineNumberWidth, 0, e.maxX*3/5+e.config.LineNumberWidth+1)
 	e.terminalscr.ScrollOk(true)
 	if err != nil {
 		e.End()
@@ -203,7 +267,7 @@ func (e *Editor) Init() {
 	}
 
 	gc.Echo(false)
-	gc.Raw(true)       // Hell yeah
+	// gc.Raw(true)       // Hell yeah
 	gc.SetEscDelay(10) // Watch out for this
 
 	err = e.stdscr.Keypad(true)
@@ -223,23 +287,41 @@ func (e *Editor) Init() {
 	//	}
 	//}()
 
-	mw, err := gc.NewWindow(1, e.maxX, e.maxY-1, 4)
+	//mw, err := gc.NewWindow(1, e.maxX, e.maxY-1, 4)
+	//if err != nil {
+	//	e.End()
+	//	log.Fatal(err)
+	//}
+	//
+	//err = mw.Keypad(true)
+	//if err != nil {
+	//	e.End()
+	//	log.Fatal(err)
+	//}
+
+	e.miniWindow, err = NewMiniWindow(e.maxY-1, 4, 1, e.maxX)
 	if err != nil {
-		e.End()
+		gc.End()
 		log.Fatal(err)
 	}
+	//e.miniWindow = &MiniWindow{
+	//	width:  e.maxX,
+	//	stdscr: mw,
+	//	texts:  make(map[string]string),
+	//}
 
-	err = mw.Keypad(true)
+	_, terminalWidth := e.terminalscr.MaxYX()
+	e.terminalWindow, err = NewMiniWindow(e.maxY-1, terminalXpos, e.maxY-1, terminalWidth)
 	if err != nil {
-		e.End()
+		gc.End()
 		log.Fatal(err)
 	}
-
-	e.miniWindow = &MiniWindow{
-		width:  e.maxX,
-		stdscr: mw,
-		texts:  make(map[string]string),
-	}
+	//tw, err := gc.NewWindow(1, terminalWidth, e.maxY-1, terminalXpos)
+	//e.terminalWindow = &MiniWindow{
+	//	width:  terminalWidth,
+	//	stdscr: tw,
+	//	texts:  make(map[string]string),
+	//}
 
 	e.lines = make([]string, 1)
 	e.terminalLines = make([]string, 0)
@@ -261,6 +343,12 @@ func (e *Editor) Init() {
 	e.tempFilePos = make(map[string]Location)
 
 	e.popupWindow, err = NewPopUpWindow(e.maxY/2, e.maxX/2, 3, 5)
+	if err != nil {
+		e.End()
+		log.Fatal(err)
+	}
+
+	err = e.initTerminal()
 	if err != nil {
 		e.End()
 		log.Fatal(err)
@@ -468,6 +556,10 @@ func (e *Editor) draw() {
 	// e.debugLog("draw time:", dt)
 }
 func (e *Editor) End() {
+	//err := e.cmdIn.Close()
+	//if err != nil {
+	//	log.Println(err)
+	//}
 	gc.End()
 }
 func (e *Editor) removeSelection() {
@@ -692,6 +784,41 @@ func (e *Editor) findNewX(x, y int) int {
 func (e *Editor) clampX() {
 	e.x = e.findNewX(e.inlinePosition, e.y)
 }
+func (e *Editor) switchFile(delta int) {
+	next := e.current + delta
+	if next >= len(e.openedFiles) {
+		next = 0
+	} else if next < 0 {
+		next = len(e.openedFiles) - 1
+	}
+	err := e.Load(e.openedFiles[next])
+	if err != nil {
+		e.debugLog(err)
+	}
+}
+func (e *Editor) exitFile(path string) {
+	//openPathsToNames map[string]string   // paths to name
+	//openedFiles      []string            // List of paths
+	//modified         map[string]bool     // paths to bool
+	//current          int                 // current file user is on
+	//tempFilePaths    map[string]string   // paths to temp file paths
+	//tempFilePos      map[string]Location // where the user is in each opened file
+
+	delete(e.openPathsToNames, path)
+	delete(e.modified, path)
+	delete(e.tempFilePaths, path)
+	delete(e.tempFilePos, path)
+
+	if e.path == path {
+		e.switchFile(1)
+	}
+
+	index := utils.Index(e.openedFiles, path)
+	e.openedFiles = append(e.openedFiles[:index], e.openedFiles[index+1:]...)
+
+	e.current = utils.Index(e.openedFiles, e.path)
+}
+
 func (e *Editor) Load(filePath string) error {
 	if e.path != "" && e.modified[e.path] {
 		if _, ok := e.tempFilePaths[e.path]; !ok {
@@ -995,24 +1122,10 @@ func (e *Editor) Run() error {
 
 			return nil
 		case 559, 563: // ALT + Right
-			next := e.current + 1
-			if next >= len(e.openedFiles) {
-				next = 0
-			}
-			err := e.Load(e.openedFiles[next])
-			if err != nil {
-				e.debugLog(err)
-			}
+			e.switchFile(1)
 
 		case 544, 548: // ALT + Left
-			next := e.current - 1
-			if next < 0 {
-				next = len(e.openedFiles) - 1
-			}
-			err := e.Load(e.openedFiles[next])
-			if err != nil {
-				e.debugLog(err)
-			}
+			e.switchFile(-1)
 
 		case 562, 566: // CTRL + Shift + Right
 			e.ctrlMoveRight()
@@ -1167,7 +1280,19 @@ func (e *Editor) Run() error {
 				break
 			}
 		case 17: // CTRL + Q Used for testing for now
-			e.popupWindow.pop("This is a very long message that is obviously too long")
+			if e.modified[e.path] {
+				str := e.miniWindow.run(true, "unsaved, are you sure? (y/n)")
+				if strings.ToLower(str) != "y" {
+					break
+				}
+			}
+
+			if len(e.openedFiles) == 1 {
+				return nil
+			}
+
+			e.exitFile(e.path)
+			//e.popupWindow.pop("This is a very long message that is obviously too long")
 		case 18: // CTRL + R
 			for {
 				str1 := e.miniWindow.run(false, "replace(find)")
@@ -1214,35 +1339,21 @@ func (e *Editor) Run() error {
 			}
 		case 20: // CTRL + T
 			e.resizeWindows()
-			if e.terminalOpened {
+			for {
 				e.drawTerminal()
+				command := e.terminalWindow.run(true, ">")
+				if command == "" {
+					break
+				}
+				//e.outputToTerminal(command)
+				commandArr := strings.Split(command, " ")
+				if len(commandArr) > 1 {
+					e.executeTerminalCommand(commandArr[0], commandArr[1:]...)
+				} else {
+					e.executeTerminalCommand(command)
+				}
 			}
-			//filenames := make([]MenuItem, len(e.recentToPaths)-1)
-			//i := 0
-			//for filename, path := range e.recentToPaths {
-			//	if path == e.path {
-			//		continue
-			//	}
-			//
-			//	filenames[i] = MenuItem{label: filename, color: e.lexer.config.Default.Color}
-			//	i++
-			//}
-			//
-			//selected, err := e.menuWindow.run(filenames, "Recent")
-			//if err != nil {
-			//	e.debugLog(err)
-			//	break
-			//}
-			//
-			//if selected != "" && e.recentToPaths[selected] != e.path {
-			//	err = e.Load(e.recentToPaths[selected])
-			//	if err != nil {
-			//		e.debugLog(err)
-			//
-			//	}
-			//	continue
-			//}
-
+			e.resizeWindows()
 		case 26: // CTRL + Z
 			e.undoTransaction()
 		case 24: // CTRL + X
