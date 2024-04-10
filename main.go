@@ -1463,6 +1463,12 @@ func (e *Editor) Run() error {
 			}
 			e.debugLog(string(output))
 
+		case gc.KEY_PAGEDOWN:
+			e.printLinesIndex = utils.Min(e.printLinesIndex+e.maxY, len(e.lines))
+			e.moveY(e.maxY)
+		case gc.KEY_PAGEUP:
+			e.printLinesIndex = utils.Max(e.printLinesIndex-e.maxY, 0)
+			e.moveY(-e.maxY)
 			// e.Run()
 		case gc.KEY_DOWN:
 			e.moveY(1)
