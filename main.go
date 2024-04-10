@@ -86,7 +86,7 @@ func filterEscapeCodes(input string) string {
 func (e *Editor) captureTerminalOutput() {
 	scanner := bufio.NewScanner(e.cmd)
 	for scanner.Scan() {
-		e.outputToTerminal(filterEscapeCodes(scanner.Text()))
+		e.debugLog(filterEscapeCodes(scanner.Text()))
 	}
 	e.debugLog("ded")
 }
@@ -112,8 +112,11 @@ func (e *Editor) drawTerminal() {
 		e.terminalscr.Erase()
 		y, _ := e.terminalscr.MaxYX()
 		for i, line := range e.terminalLines {
-			e.terminalscr.MovePrint(y-i-1, 0, line)
+			e.terminalscr.MovePrint(y-i-1, 1, line)
 		}
+		e.terminalscr.VLine(0, 0, 0, e.maxY)
+
+		e.terminalscr.MoveAddChar(1, 0, gc.ACS_RTEE)
 		e.terminalscr.Refresh()
 	}
 
@@ -137,8 +140,28 @@ func (e *Editor) outputToTerminal(args ...any) {
 
 	logArray := strings.Split(logString, "\n")
 
+	finalArray := make([]string, 0)
+
+	_, terminalWidth := e.terminalscr.MaxYX()
+	terminalWidth -= 2
+	for _, line := range logArray {
+		if len(line) >= terminalWidth {
+			splitLineArr := make([]string, 0)
+			for len(line) >= terminalWidth {
+				prev := line[:terminalWidth]
+
+				splitLineArr = append(splitLineArr, prev)
+				line = line[terminalWidth:]
+			}
+			splitLineArr = append(splitLineArr, line)
+			finalArray = append(finalArray, utils.Reverse(splitLineArr)...)
+			continue
+		}
+		finalArray = append(finalArray, line)
+	}
+
 	e.terminalLock.Lock()
-	e.terminalLines = append(logArray, e.terminalLines...)
+	e.terminalLines = append(finalArray, e.terminalLines...)
 
 	if len(e.terminalLines) > e.maxY {
 		e.terminalLines = e.terminalLines[:e.maxY]
@@ -198,6 +221,21 @@ func (e *Editor) initTerminal() error {
 	//	e.debugLog(string(b))
 	////}
 
+	maxY, maxX := e.terminalscr.MaxYX()
+	err = pty.Setsize(e.cmd, &pty.Winsize{
+		Rows: uint16(maxY),
+		Cols: uint16(maxX),
+		X:    0,
+		Y:    0,
+	})
+	if err != nil {
+		return err
+	}
+	//err = pty.InheritSize(e.terminalscr, e.cmd) // Set size of fake terminal
+	//if err != nil {
+	//	return err
+	//}
+
 	go e.captureTerminalOutput()
 
 	return nil
@@ -225,7 +263,8 @@ func (e *Editor) Init() {
 
 	e.config, err = ReadEditorConfig()
 	if err != nil {
-		e.debugLog(err)
+		log.Println(err)
+		//e.debugLog(err)
 	}
 
 	// TODO: I hate this
@@ -330,7 +369,7 @@ func (e *Editor) Init() {
 
 	e.miniWindow, err = NewMiniWindow(e.maxY-1, 4, 1, e.maxX)
 	if err != nil {
-		gc.End()
+		e.End()
 		log.Fatal(err)
 	}
 	//e.miniWindow = &MiniWindow{
@@ -342,7 +381,7 @@ func (e *Editor) Init() {
 	_, terminalWidth := e.terminalscr.MaxYX()
 	e.terminalWindow, err = NewMiniWindow(e.maxY-1, terminalXpos, e.maxY-1, terminalWidth)
 	if err != nil {
-		gc.End()
+		e.End()
 		log.Fatal(err)
 	}
 	//tw, err := gc.NewWindow(1, terminalWidth, e.maxY-1, terminalXpos)
@@ -382,6 +421,8 @@ func (e *Editor) Init() {
 		e.End()
 		log.Fatal(err)
 	}
+
+	e.debugLog("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 }
 func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	if startX == endX && startY == endY {
@@ -404,7 +445,7 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	return (line >= startY && line <= endY) && (col >= startX && col < endX)
 }
 func (e *Editor) drawHeader() {
-	maxY, maxX := e.headerscr.MaxYX()
+	_, maxX := e.headerscr.MaxYX()
 
 	e.headerscr.Erase()
 	e.headerscr.HLine(1, 0, 0, maxX)
@@ -431,12 +472,12 @@ func (e *Editor) drawHeader() {
 		e.headerscr.Move(0, x+1)
 		//e.headerscr.Print(" ")
 	}
-	e.headerscr.VLine(0, maxX, 0, 1)
+	//e.headerscr.VLine(0, maxX, 0, 1)
 
-	if e.terminalOpened {
-		e.headerscr.VLine(0, maxX-1, 0, maxY)
-		e.headerscr.MoveAddChar(1, maxX-1, gc.ACS_RTEE)
-	}
+	//if e.terminalOpened {
+	//	//e.headerscr.VLine(0, maxX-1, 0, maxY)
+	//	e.headerscr.MoveAddChar(1, maxX, gc.ACS_RTEE)
+	//}
 	e.headerscr.Refresh()
 }
 func (e *Editor) drawLineNumbers() {
@@ -566,9 +607,9 @@ func (e *Editor) draw() {
 		e.stdscr.Println()
 
 	}
-	if e.terminalOpened {
-		e.stdscr.VLine(0, e.maxX-1, 0, e.maxY)
-	}
+	//if e.terminalOpened {
+	//	e.stdscr.VLine(0, e.maxX-1, 0, e.maxY)
+	//}
 
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
@@ -596,6 +637,10 @@ func (e *Editor) End() {
 	//if err != nil {
 	//	log.Println(err)
 	//}
+	if e.terminalOpened {
+		e.resizeWindows() // TODO: figure out why
+	}
+
 	e.runCleanUps()
 	gc.End()
 }
@@ -1376,6 +1421,11 @@ func (e *Editor) Run() error {
 			}
 		case 20: // CTRL + T
 			e.resizeWindows()
+
+			if !e.terminalOpened {
+				break
+			}
+
 			for {
 				e.drawTerminal()
 				command := e.terminalWindow.run(true, ">")
@@ -1390,7 +1440,7 @@ func (e *Editor) Run() error {
 					e.executeTerminalCommand(command)
 				}
 			}
-			e.resizeWindows()
+			//e.resizeWindows()
 		case 26: // CTRL + Z
 			e.undoTransaction()
 		case 24: // CTRL + X
