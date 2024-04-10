@@ -1,6 +1,12 @@
+# github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
+## explicit
+github.com/acarl005/stripansi
 # github.com/atotto/clipboard v0.1.4
 ## explicit
 github.com/atotto/clipboard
+# github.com/creack/pty v1.1.21
+## explicit; go 1.13
+github.com/creack/pty
 # github.com/rthornton128/goncurses v0.0.0-20231014161942-82671379df88
 ## explicit; go 1.15
 github.com/rthornton128/goncurses

@@ -11,9 +11,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/acarl005/stripansi"
 	"github.com/atotto/clipboard"
+	"github.com/creack/pty"
 	"github.com/jonasfreyr/playground/utils"
 	gc "github.com/rthornton128/goncurses"
 )
@@ -43,8 +46,11 @@ type Editor struct {
 
 	path string
 
+	cleanUps []func()
+
 	terminalscr    *gc.Window
 	terminalOpened bool
+	terminalLock   *sync.RWMutex
 
 	miniWindow     *MiniWindow
 	menuWindow     *MenuWindow
@@ -56,8 +62,7 @@ type Editor struct {
 	config *EditorConfig
 
 	terminalLines []string
-	cmdIn         io.WriteCloser
-	cmd           *exec.Cmd
+	cmd           *os.File
 
 	// TODO: Maybe collect all these into a struct
 	openPathsToNames map[string]string   // paths to name
@@ -70,29 +75,34 @@ type Editor struct {
 
 var DEBUG_MODE = false
 
-func (e *Editor) captureTerminalOutput(cmdOut io.ReadCloser) {
-	for {
-		output, err := io.ReadAll(cmdOut)
-		if err != nil {
-			e.debugLog(err)
-			return
-		}
-		e.outputToTerminal(string(output))
+func filterEscapeCodes(input string) string {
+	//re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\[\?[0-9]*[a-zA-Z]|\x1b\][0-9]*;`)
+
+	return stripansi.Strip(input)
+
+	//return re.ReplaceAllString(input, "")
+}
+
+func (e *Editor) captureTerminalOutput() {
+	scanner := bufio.NewScanner(e.cmd)
+	for scanner.Scan() {
+		e.outputToTerminal(filterEscapeCodes(scanner.Text()))
 	}
+	e.debugLog("ded")
 }
 
 func (e *Editor) executeTerminalCommand(command string, args ...string) {
-	command = strings.Join(append([]string{command}, args...), " ")
+	command = strings.Join(append([]string{command}, args...), " ") + "\r"
 
-	_, err := io.WriteString(e.cmdIn, command)
+	_, err := io.WriteString(e.cmd, command)
 	if err != nil {
 		e.debugLog(err)
 	}
-
-	e.cmd.Start()
 }
 
 func (e *Editor) drawTerminal() {
+	e.terminalLock.RLock()
+	defer e.terminalLock.RUnlock()
 	err := gc.Cursor(0)
 	if err != nil {
 		log.Println(err)
@@ -126,11 +136,14 @@ func (e *Editor) outputToTerminal(args ...any) {
 	}
 
 	logArray := strings.Split(logString, "\n")
+
+	e.terminalLock.Lock()
 	e.terminalLines = append(logArray, e.terminalLines...)
 
 	if len(e.terminalLines) > e.maxY {
 		e.terminalLines = e.terminalLines[:e.maxY]
 	}
+	e.terminalLock.Unlock()
 
 	e.drawTerminal()
 }
@@ -152,53 +165,59 @@ func (e *Editor) debugLog(args ...any) {
 
 func (e *Editor) initTerminal() error {
 	// Create the command.
-	cmd := exec.Command("cat")
+	c := exec.Command("/bin/bash")
 
-	// Get a pipe to the command's standard input.
-	stdin, err := cmd.StdinPipe()
+	var err error
+	e.cmd, err = pty.Start(c)
 	if err != nil {
-		fmt.Printf("Error obtaining stdin: %s\n", err)
-		return nil
+		return err
 	}
 
-	// Get a pipe to the command's standard output.
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Printf("Error obtaining stdout: %s\n", err)
-		return nil
-	}
+	e.addCleanUpFunc(func() {
+		e.debugLog("killing terminal")
+		err := c.Process.Kill()
+		if err != nil {
+			e.debugLog(err)
+		}
+		e.debugLog("terminal process killed")
+	})
 
-	// Start the command.
-	if err := cmd.Start(); err != nil {
-		fmt.Printf("Error starting command: %s\n", err)
-		return nil
-	}
+	//e.debugLog("Before write")
 
-	// Write something to the command's stdin.
-	message := "Hello, World!\n"
-	_, err = io.WriteString(stdin, message)
-	if err != nil {
-		fmt.Printf("Error writing to stdin: %s\n", err)
-		return nil
-	}
-	stdin.Close() // Important to close the stdin or the process might hang waiting for more input
+	//for i := 0; i < 2; i++ {
+	//	e.cmd.Write([]byte("ls\r"))
+	//
+	//	e.debugLog("After write")
+	//	time.Sleep(time.Second)
+	//
+	//	b := make([]byte, 1024)
+	//	_, err = e.cmd.Read(b)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	e.debugLog(string(b))
+	////}
 
-	// Read from the command's stdout.
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		fmt.Printf("Output from command: %s\n", scanner.Text())
-	}
-
-	// Wait for the command to finish.
-	if err := cmd.Wait(); err != nil {
-		fmt.Printf("Command finished with error: %s\n", err)
-	}
+	go e.captureTerminalOutput()
 
 	return nil
 }
+
+func (e *Editor) addCleanUpFunc(f func()) {
+	e.cleanUps = append(e.cleanUps, f)
+}
+
 func (e *Editor) Init() {
 	var err error
 	e.stdscr, err = gc.Init()
+
+	e.terminalLock = &sync.RWMutex{}
+
+	e.cleanUps = make([]func(), 0)
+
+	e.addCleanUpFunc(func() {
+		e.debugLog("test")
+	})
 
 	if err != nil {
 		log.Fatal("init", err)
@@ -277,7 +296,7 @@ func (e *Editor) Init() {
 	}
 
 	gc.Echo(false)
-	// gc.Raw(true)       // Hell yeah
+	gc.Raw(true)       // Hell yeah
 	gc.SetEscDelay(10) // Watch out for this
 
 	err = e.stdscr.Keypad(true)
@@ -565,11 +584,19 @@ func (e *Editor) draw() {
 	// dt := time.Since(before)
 	// e.debugLog("draw time:", dt)
 }
+
+func (e *Editor) runCleanUps() {
+	for _, f := range e.cleanUps {
+		f()
+	}
+}
+
 func (e *Editor) End() {
 	//err := e.cmdIn.Close()
 	//if err != nil {
 	//	log.Println(err)
 	//}
+	e.runCleanUps()
 	gc.End()
 }
 func (e *Editor) removeSelection() {
