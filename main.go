@@ -78,7 +78,7 @@ var DEBUG_MODE = false
 func filterEscapeCodes(input string) string {
 	//re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\[\?[0-9]*[a-zA-Z]|\x1b\][0-9]*;`)
 
-	return stripansi.Strip(input)
+	return strings.ReplaceAll(stripansi.Strip(input), "\r", "")
 
 	//return re.ReplaceAllString(input, "")
 }
@@ -86,7 +86,7 @@ func filterEscapeCodes(input string) string {
 func (e *Editor) captureTerminalOutput() {
 	scanner := bufio.NewScanner(e.cmd)
 	for scanner.Scan() {
-		e.debugLog(filterEscapeCodes(scanner.Text()))
+		e.outputToTerminal(filterEscapeCodes(scanner.Text()))
 	}
 	e.debugLog("ded")
 }
@@ -934,7 +934,9 @@ func (e *Editor) Load(filePath string) error {
 		lines, err = os.ReadFile(filePath)
 		e.modified[e.path] = false
 		if err != nil {
-			return err
+			e.debugLog("file not found, creating file")
+			lines = []byte{}
+			e.modified[e.path] = true
 		}
 	}
 
@@ -1612,10 +1614,16 @@ func (e *Editor) Run() error {
 		e.transactions.submit(beforeY, beforeX)
 	}
 }
-func (e *Editor) Save(filepath string) error {
+func (e *Editor) Save(path string) error {
 	e.modified[e.path] = false
 	data := []byte(strings.Join(e.lines, "\n"))
-	err := os.WriteFile(filepath, data, 0666)
+
+	err := os.MkdirAll(filepath.Dir(path), 0750)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(path, data, 0666)
 	if err != nil {
 		return err
 	}
