@@ -88,7 +88,7 @@ func (e *Editor) captureTerminalOutput() {
 	for scanner.Scan() {
 		e.outputToTerminal(filterEscapeCodes(scanner.Text()))
 	}
-	e.debugLog("ded")
+	e.debugLog("terminal output capture stopped")
 }
 
 func (e *Editor) executeTerminalCommand(command string, args ...string) {
@@ -188,7 +188,7 @@ func (e *Editor) debugLog(args ...any) {
 
 func (e *Editor) initTerminal() error {
 	// Create the command.
-	c := exec.Command("/bin/bash")
+	c := exec.Command("sh")
 
 	var err error
 	e.cmd, err = pty.Start(c)
@@ -1422,10 +1422,9 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
-			e.resizeWindows()
 
 			if !e.terminalOpened {
-				break
+				e.resizeWindows()
 			}
 
 			for {

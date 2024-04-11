@@ -56,7 +56,7 @@ func (w *MiniWindow) run(clear bool, label string) string {
 		k := w.stdscr.GetChar()
 
 		switch k {
-		case gc.KEY_ESC, gc.KEY_DOWN, gc.KEY_UP:
+		case gc.KEY_ESC:
 			return ""
 		case gc.KEY_LEFT:
 			w.moveX(-1, label)
