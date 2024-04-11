@@ -1170,7 +1170,22 @@ func (e *Editor) resizeWindows() {
 
 	e.terminalOpened = !e.terminalOpened
 }
-
+func (e *Editor) runTerminal() {
+	for {
+		e.drawTerminal()
+		command := e.terminalWindow.run(true, ">")
+		if command == "" {
+			break
+		}
+		//e.outputToTerminal(command)
+		commandArr := strings.Split(command, " ")
+		if len(commandArr) > 1 {
+			e.executeTerminalCommand(commandArr[0], commandArr[1:]...)
+		} else {
+			e.executeTerminalCommand(command)
+		}
+	}
+}
 func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
@@ -1422,24 +1437,12 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
-
 			if !e.terminalOpened {
 				e.resizeWindows()
-			}
 
-			for {
-				e.drawTerminal()
-				command := e.terminalWindow.run(true, ">")
-				if command == "" {
-					break
-				}
-				//e.outputToTerminal(command)
-				commandArr := strings.Split(command, " ")
-				if len(commandArr) > 1 {
-					e.executeTerminalCommand(commandArr[0], commandArr[1:]...)
-				} else {
-					e.executeTerminalCommand(command)
-				}
+				e.runTerminal()
+			} else {
+				e.resizeWindows()
 			}
 			//e.resizeWindows()
 		case 26: // CTRL + Z
