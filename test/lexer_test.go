@@ -2,7 +2,6 @@ package test
 
 import (
 	"fmt"
-	"github.com/jonasfreyr/playground"
 	"os"
 	"testing"
 )

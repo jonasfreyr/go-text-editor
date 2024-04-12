@@ -17,7 +17,7 @@ import (
 	"github.com/acarl005/stripansi"
 	"github.com/atotto/clipboard"
 	"github.com/creack/pty"
-	"github.com/jonasfreyr/playground/utils"
+	"github.com/jonasfreyr/gim/utils"
 	gc "github.com/rthornton128/goncurses"
 )
 

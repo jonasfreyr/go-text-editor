@@ -1,4 +1,4 @@
-module github.com/jonasfreyr/playground
+module github.com/jonasfreyr/gim
 
 go 1.18
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jonasfreyr/playground/utils"
+	"github.com/jonasfreyr/gim/utils"
 	gc "github.com/rthornton128/goncurses"
 	"log"
 )

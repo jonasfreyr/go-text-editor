@@ -4,7 +4,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/jonasfreyr/playground/utils"
+	"github.com/jonasfreyr/gim/utils"
 	"log"
 	"os"
 	"strconv"

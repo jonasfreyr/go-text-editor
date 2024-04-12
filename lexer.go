@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jonasfreyr/playground/utils"
+	"github.com/jonasfreyr/gim/utils"
 )
 
 type Location struct {
