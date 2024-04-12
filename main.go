@@ -51,6 +51,7 @@ type Editor struct {
 	terminalscr    *gc.Window
 	terminalOpened bool
 	terminalLock   *sync.RWMutex
+	terminalAlive  bool
 
 	miniWindow     *MiniWindow
 	menuWindow     *MenuWindow
@@ -88,10 +89,17 @@ func (e *Editor) captureTerminalOutput() {
 	for scanner.Scan() {
 		e.outputToTerminal(filterEscapeCodes(scanner.Text()))
 	}
+	e.terminalAlive = false
 	e.debugLog("terminal output capture stopped")
 }
 
 func (e *Editor) executeTerminalCommand(command string, args ...string) {
+	if !e.terminalAlive {
+		err := e.initTerminal()
+		if err != nil {
+			e.debugLog(err)
+		}
+	}
 	command = strings.Join(append([]string{command}, args...), " ") + "\r"
 
 	_, err := io.WriteString(e.cmd, command)
@@ -188,6 +196,10 @@ func (e *Editor) debugLog(args ...any) {
 
 func (e *Editor) initTerminal() error {
 	// Create the command.
+	if e.terminalAlive {
+		return nil
+	}
+
 	c := exec.Command("sh")
 
 	var err error
@@ -237,6 +249,9 @@ func (e *Editor) initTerminal() error {
 	//}
 
 	go e.captureTerminalOutput()
+
+	e.terminalAlive = true
+	e.debugLog("terminal started")
 
 	return nil
 }
@@ -416,13 +431,7 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	err = e.initTerminal()
-	if err != nil {
-		e.End()
-		log.Fatal(err)
-	}
-
-	e.debugLog("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	//e.debugLog("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 }
 func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	if startX == endX && startY == endY {
