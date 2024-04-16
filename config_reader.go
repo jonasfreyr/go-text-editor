@@ -17,6 +17,8 @@ const GIM_PATH = ".gim"
 var HIGHLIGHTING_PATH = JoinPath(GIM_PATH, "highlighting")
 var EDITOR_CONFIG_PATH = JoinPath(GIM_PATH, "config.config")
 
+var config *EditorConfig
+
 type TokensConfig struct {
 	Tokens []string `json:"tokens"`
 	Color  [3]int   `json:"color"`
@@ -44,6 +46,7 @@ type EditorConfig struct {
 	LineNumberWidth int         `json:"line_number_width"`
 	TabWidth        int         `json:"tab_width"`
 	FolderColor     ColorConfig `json:"folder_color"`
+	FileColor       ColorConfig `json:"file_color"`
 }
 
 func InitHomeFolder() {
@@ -102,6 +105,7 @@ func getDefaultEditorConfigValues() *EditorConfig {
 		LineNumberWidth: 5,
 		TabWidth:        4,
 		FolderColor:     ColorConfig{Color: [3]int{104, 151, 187}},
+		FileColor:       ColorConfig{Color: [3]int{254, 254, 254}},
 	}
 }
 
@@ -171,21 +175,26 @@ func createDefaultHighlightingConfig() (*HighlightingConfig, error) {
 	return config, err
 }
 
-func ReadEditorConfig() (*EditorConfig, error) {
+func GetEditorConfig() *EditorConfig {
+	if config == nil {
+		return getDefaultEditorConfigValues()
+	}
+
+	return config
+}
+
+func ReadEditorConfig() {
 	f, err := os.Open(JoinPath(getHomePath(), EDITOR_CONFIG_PATH))
 	if err != nil {
-		config, err := createDefaultEditorConfig()
-		return config, err
+		config, err = createDefaultEditorConfig()
 	}
 	defer f.Close()
 
-	var config EditorConfig
 	decoder := json.NewDecoder(f)
 	err = decoder.Decode(&config)
 
 	if err != nil {
-		return getDefaultEditorConfigValues(), err
+		return
 	}
 
-	return &config, nil
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,13 +53,11 @@ type Editor struct {
 	terminalAlive  bool
 
 	miniWindow     *MiniWindow
-	menuWindow     *MenuWindow
+	menuWindow     *FileMenuWindow
 	terminalWindow *MiniWindow
 	popupWindow    *PopUpWindow
 
 	transactions *Transactions
-
-	config *EditorConfig
 
 	terminalLines []string
 	cmd           *os.File
@@ -276,14 +273,16 @@ func (e *Editor) Init() {
 		log.Fatal("init", err)
 	}
 
-	e.config, err = ReadEditorConfig()
+	ReadEditorConfig()
+	config := GetEditorConfig()
+
 	if err != nil {
 		log.Println(err)
 		//e.debugLog(err)
 	}
 
 	// TODO: I hate this
-	TabWidth = e.config.TabWidth
+	//TabWidth = config.TabWidth
 
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 	//if DEBUG_MODE {
@@ -303,14 +302,14 @@ func (e *Editor) Init() {
 	//	e.maxY, e.maxX = e.stdscr.MaxYX()
 	//
 	//} else {
-	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX-e.config.LineNumberWidth, 2, e.config.LineNumberWidth)
+	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX-config.LineNumberWidth, 2, config.LineNumberWidth)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
 	}
 
-	terminalXpos := e.maxX*3/5 + e.config.LineNumberWidth + 1
-	e.terminalscr, err = gc.NewWindow(e.maxY-1, e.maxX*2/5-e.config.LineNumberWidth, 0, e.maxX*3/5+e.config.LineNumberWidth+1)
+	terminalXpos := e.maxX*3/5 + config.LineNumberWidth + 1
+	e.terminalscr, err = gc.NewWindow(e.maxY-1, e.maxX*2/5-config.LineNumberWidth, 0, e.maxX*3/5+config.LineNumberWidth+1)
 	e.terminalscr.ScrollOk(true)
 	if err != nil {
 		e.End()
@@ -320,13 +319,13 @@ func (e *Editor) Init() {
 
 	// }
 
-	e.lineNrscr, err = gc.NewWindow(e.maxY, e.config.LineNumberWidth, 2, 0)
+	e.lineNrscr, err = gc.NewWindow(e.maxY, config.LineNumberWidth, 2, 0)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
 	}
 
-	e.headerscr, err = gc.NewWindow(2, e.maxX+e.config.LineNumberWidth, 0, 0)
+	e.headerscr, err = gc.NewWindow(2, e.maxX+config.LineNumberWidth, 0, 0)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
@@ -359,7 +358,7 @@ func (e *Editor) Init() {
 		log.Fatal(err)
 	}
 
-	gc.SetTabSize(e.config.TabWidth)
+	gc.SetTabSize(config.TabWidth)
 
 	//go func() {
 	//	count := 0
@@ -413,7 +412,7 @@ func (e *Editor) Init() {
 	// TODO: not hardcode these values
 	width := e.maxX - 12
 	height := 20
-	e.menuWindow, err = NewMenuWindow(e.maxY/2-(height/2), utils.Max(e.maxX/2-(width/2), 4), height, width)
+	e.menuWindow, err = NewFileMenuWindow(e.maxY/2-(height/2), utils.Max(e.maxX/2-(width/2), 4), height, width)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
@@ -454,11 +453,13 @@ func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	return (line >= startY && line <= endY) && (col >= startX && col < endX)
 }
 func (e *Editor) drawHeader() {
+	config := GetEditorConfig()
+
 	_, maxX := e.headerscr.MaxYX()
 
 	e.headerscr.Erase()
 	e.headerscr.HLine(1, 0, 0, maxX)
-	e.headerscr.MoveAddChar(1, e.config.LineNumberWidth-1, gc.ACS_TTEE)
+	e.headerscr.MoveAddChar(1, config.LineNumberWidth-1, gc.ACS_TTEE)
 	e.headerscr.Move(0, 0)
 
 	for _, path := range e.openedFiles {
@@ -490,18 +491,22 @@ func (e *Editor) drawHeader() {
 	e.headerscr.Refresh()
 }
 func (e *Editor) drawLineNumbers() {
+	config := GetEditorConfig()
+
 	start := e.printLinesIndex
 	e.lineNrscr.Erase()
-	EnableColor(e.lineNrscr, e.config.LineNumberColor.Color)
+	EnableColor(e.lineNrscr, config.LineNumberColor.Color)
 	for i := 1; i <= e.maxY; i++ {
 		e.lineNrscr.MovePrint(i-1, 0, fmt.Sprintf("%s", strconv.Itoa(start+i)))
 	}
-	DisableColor(e.lineNrscr, e.config.LineNumberColor.Color)
-	e.lineNrscr.VLine(0, e.config.LineNumberWidth-1, 0, e.maxY)
+	DisableColor(e.lineNrscr, config.LineNumberColor.Color)
+	e.lineNrscr.VLine(0, config.LineNumberWidth-1, 0, e.maxY)
 	e.lineNrscr.Refresh()
 }
 
 func (e *Editor) accountForTabs(x, y int) int {
+	config := GetEditorConfig()
+
 	newX := 0
 
 	if x > len(e.lines[y]) {
@@ -510,7 +515,7 @@ func (e *Editor) accountForTabs(x, y int) int {
 
 	for _, token := range e.lines[y][:x] {
 		if string(token) == "\t" {
-			newX += e.config.TabWidth - (newX % e.config.TabWidth)
+			newX += config.TabWidth - (newX % config.TabWidth)
 		} else {
 			newX++
 		}
@@ -519,14 +524,15 @@ func (e *Editor) accountForTabs(x, y int) int {
 }
 func (e *Editor) draw() {
 	// before := time.Now()
+	config := GetEditorConfig()
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
 
 	// TODO: Don't know why it is 8 instead of 4
-	if accountedForTabs-e.printLineStartIndex > e.maxX-e.config.TabWidth*2 {
-		e.printLineStartIndex = accountedForTabs - e.maxX + e.config.TabWidth*2
-	} else if accountedForTabs-e.config.TabWidth*2 < e.printLineStartIndex {
-		e.printLineStartIndex = utils.Max(accountedForTabs-e.config.TabWidth*2, 0)
+	if accountedForTabs-e.printLineStartIndex > e.maxX-config.TabWidth*2 {
+		e.printLineStartIndex = accountedForTabs - e.maxX + config.TabWidth*2
+	} else if accountedForTabs-config.TabWidth*2 < e.printLineStartIndex {
+		e.printLineStartIndex = utils.Max(accountedForTabs-config.TabWidth*2, 0)
 	}
 
 	selectedXStart := e.accountForTabs(e.selectedXStart, e.selectedYStart)
@@ -929,7 +935,7 @@ func (e *Editor) Load(filePath string) error {
 
 	}
 	e.tempFilePos[e.path] = Location{col: e.x, line: e.y}
-	filePath = strings.ToLower(filePath)
+	// filePath = strings.ToLower(filePath)
 	e.path = filePath
 
 	var lines []byte
@@ -1005,14 +1011,16 @@ func (e *Editor) Load(filePath string) error {
 	return nil
 }
 func (e *Editor) moveY(delta int) {
+	config := GetEditorConfig()
+
 	e.y = utils.Min(utils.Max(e.y+delta, 0), len(e.lines)-1)
 	e.debugLog(e.y, len(e.lines))
 	e.clampX()
 
-	if e.y-e.printLinesIndex > e.maxY-e.config.TabWidth {
-		e.printLinesIndex = e.y - e.maxY + e.config.TabWidth
-	} else if e.y-e.config.TabWidth < e.printLinesIndex {
-		e.printLinesIndex = utils.Max(e.y-e.config.TabWidth, 0)
+	if e.y-e.printLinesIndex > e.maxY-config.TabWidth {
+		e.printLinesIndex = e.y - e.maxY + config.TabWidth
+	} else if e.y-config.TabWidth < e.printLinesIndex {
+		e.printLinesIndex = utils.Max(e.y-config.TabWidth, 0)
 	}
 }
 func (e *Editor) moveX(delta int) {
@@ -1163,16 +1171,18 @@ func (e *Editor) find(text string) (int, int) {
 	return -1, -1
 }
 func (e *Editor) resizeWindows() {
+	config := GetEditorConfig()
+
 	if e.terminalOpened {
 		_, width := e.terminalscr.MaxYX()
 		e.stdscr.Resize(e.maxY, e.maxX+width)
 		height, _ := e.headerscr.MaxYX()
-		e.headerscr.Resize(height, e.maxX+width+e.config.LineNumberWidth)
+		e.headerscr.Resize(height, e.maxX+width+config.LineNumberWidth)
 	} else {
 		_, width := e.terminalscr.MaxYX()
 		e.stdscr.Resize(e.maxY, e.maxX-width)
 		height, _ := e.headerscr.MaxYX()
-		e.headerscr.Resize(height, e.maxX-width+e.config.LineNumberWidth)
+		e.headerscr.Resize(height, e.maxX-width+config.LineNumberWidth)
 	}
 
 	_, e.maxX = e.stdscr.MaxYX()
@@ -1182,16 +1192,9 @@ func (e *Editor) resizeWindows() {
 func (e *Editor) runTerminal() {
 	for {
 		e.drawTerminal()
-		command := e.terminalWindow.run(true, ">")
+		command := e.terminalWindow.whileRun(true, ">")
 		if command == "" {
 			break
-		}
-		//e.outputToTerminal(command)
-		commandArr := strings.Split(command, " ")
-		if len(commandArr) > 1 {
-			e.executeTerminalCommand(commandArr[0], commandArr[1:]...)
-		} else {
-			e.executeTerminalCommand(command)
 		}
 	}
 }
@@ -1221,7 +1224,7 @@ func (e *Editor) Run() error {
 				}
 			}
 			if anyUnsaved {
-				str := e.miniWindow.run(true, "unsaved, are you sure? (y/n)")
+				str := e.miniWindow.whileRun(true, "unsaved, are you sure? (y/n)")
 				if strings.ToLower(str) == "y" {
 					return nil
 				}
@@ -1282,7 +1285,7 @@ func (e *Editor) Run() error {
 			e.debugLog("After y, len", e.y, len(e.lines))
 		case 6: // CTRL + F
 			for {
-				str := e.miniWindow.run(false, "find")
+				str := e.miniWindow.whileRun(false, "find")
 				if str == "" {
 					break
 				}
@@ -1308,7 +1311,7 @@ func (e *Editor) Run() error {
 				e.draw()
 			}
 		case 7: // CTRL + G
-			str := e.miniWindow.run(true, "goto")
+			str := e.miniWindow.whileRun(true, "goto")
 			lineNr, err := strconv.Atoi(str)
 			if err != nil {
 				break
@@ -1322,74 +1325,22 @@ func (e *Editor) Run() error {
 			e.inlinePosition = 0
 			e.moveYto(lineNr - 1)
 		case 15: // CTRL + O
-			currentPath := "."
-			for {
-				files, err := os.ReadDir(currentPath)
-				if err != nil {
-					e.debugLog(err)
-					break
-				}
+			path, err := e.menuWindow.run()
+			if err != nil {
+				e.debugLog(err)
+			}
 
-				directoryNames := make([]string, 0)
-				fileNames := make([]string, 0)
-				for _, file := range files {
-					fileInfo, err := os.Stat(filepath.Join(currentPath, file.Name()))
-					if err != nil {
-						e.debugLog("failed to get stats for file/dir:", err)
-						continue
-					}
-
-					if fileInfo.IsDir() {
-						directoryNames = append(directoryNames, file.Name())
-					} else {
-						fileNames = append(fileNames, file.Name())
-					}
-				}
-
-				sort.Strings(directoryNames)
-				sort.Strings(fileNames)
-
-				menuItems := make([]MenuItem, 0)
-				for _, name := range directoryNames {
-					menuItems = append(menuItems, MenuItem{label: name, color: e.config.FolderColor.Color})
-				}
-				for _, name := range fileNames {
-					menuItems = append(menuItems, MenuItem{label: name, color: e.lexer.config.Default.Color})
-				}
-				e.draw()
-				selected, err := e.menuWindow.run(menuItems, currentPath)
-				if err != nil {
-					e.debugLog(err)
-					break
-				}
-				if selected == "" {
-					if currentPath == "." {
-						break
-					}
-					currentPath = filepath.Dir(currentPath)
-				}
-
-				currentPath = filepath.Join(currentPath, selected)
-
-				fileInfo, err := os.Stat(currentPath)
-				if err != nil {
-					e.debugLog(err)
-					break
-				}
-
-				if fileInfo.IsDir() {
-					continue
-				}
-
-				err = e.Load(currentPath)
-				if err != nil {
-					e.debugLog(err)
-				}
+			if path == "" {
 				break
+			}
+
+			err = e.Load(path)
+			if err != nil {
+				e.debugLog(err)
 			}
 		case 17: // CTRL + Q Used for testing for now
 			if e.modified[e.path] {
-				str := e.miniWindow.run(true, "unsaved, are you sure? (y/n)")
+				str := e.miniWindow.whileRun(true, "unsaved, are you sure? (y/n)")
 				if strings.ToLower(str) != "y" {
 					break
 				}
@@ -1403,7 +1354,7 @@ func (e *Editor) Run() error {
 			//e.popupWindow.pop("This is a very long message that is obviously too long")
 		case 18: // CTRL + R
 			for {
-				str1 := e.miniWindow.run(false, "replace(find)")
+				str1 := e.miniWindow.whileRun(false, "replace(find)")
 				if str1 == "" {
 					break
 				}
@@ -1424,7 +1375,7 @@ func (e *Editor) Run() error {
 
 				e.draw()
 
-				str2 := e.miniWindow.run(false, "replace(overwrite)")
+				str2 := e.miniWindow.whileRun(false, "replace(overwrite)")
 				if str2 == "" {
 					break
 				}
@@ -1503,29 +1454,6 @@ func (e *Editor) Run() error {
 		case 536, 540: // CTRL+Home
 			e.moveY(-e.y)
 			updateLengthIndex = false
-		case gc.KEY_F5:
-			command := e.miniWindow.run(false, "run")
-			if command == "" {
-				break
-			}
-
-			commandList := strings.Split(command, " ")
-			cmdName := commandList[0]
-			var cmd *exec.Cmd
-			if len(commandList) > 1 {
-				cmd = exec.Command(cmdName, command[1:])
-			} else {
-				cmd = exec.Command(cmdName)
-			}
-
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				e.debugLog("1")
-				e.debugLog(err)
-				break
-			}
-			e.debugLog(string(output))
-
 		case gc.KEY_PAGEDOWN:
 			e.printLinesIndex = utils.Min(e.printLinesIndex+e.maxY, len(e.lines))
 			e.moveY(e.maxY)

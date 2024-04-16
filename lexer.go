@@ -21,12 +21,10 @@ type Token struct {
 	location Location
 }
 
-// TODO: I hate this
-var TabWidth int
-
 func (t *Token) Length() int {
+	config := GetEditorConfig()
 	if t.lexeme == "\t" {
-		return TabWidth - (t.location.col)%TabWidth
+		return config.TabWidth - (t.location.col)%config.TabWidth
 	}
 
 	return len(t.lexeme)
@@ -79,6 +77,8 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 	newTokens := make([]Token, 0)
 	newLexemes := strings.Split(token.lexeme, "\n")
 
+	config := GetEditorConfig()
+
 	for i, lexeme := range newLexemes {
 		col := 0
 		if i == 0 {
@@ -108,7 +108,7 @@ func (l *Lexer) splitMultilineToken(token Token) []Token {
 						col:  lastLoc,
 					}
 					newTokens = append(newTokens, l.newToken("\t", token.color, newLoc))
-					lastLoc += TabWidth - (lastLoc % TabWidth)
+					lastLoc += config.TabWidth - (lastLoc % config.TabWidth)
 					newLexeme = ""
 
 				} else {
@@ -177,6 +177,8 @@ func (l *Lexer) Tokenize(text string) [][]Token {
 	return tokens
 }
 func (l *Lexer) read() {
+	config := GetEditorConfig()
+
 	if l.eof {
 		l.ch = ""
 	}
@@ -185,7 +187,7 @@ func (l *Lexer) read() {
 		l.line++
 		l.col = 0
 	} else if l.ch == "\t" {
-		l.col += TabWidth - (l.col)%TabWidth
+		l.col += config.TabWidth - (l.col)%config.TabWidth
 
 	} else {
 		l.col++

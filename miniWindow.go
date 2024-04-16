@@ -6,7 +6,7 @@ import (
 )
 
 type MiniWindow struct {
-	x     int
+	x     map[string]int
 	width int
 
 	stdscr *gc.Window
@@ -26,7 +26,7 @@ func NewMiniWindow(y, x, h, w int) (*MiniWindow, error) {
 		//log.Fatal(err)
 	}
 
-	return &MiniWindow{width: w, stdscr: stdscr, texts: make(map[string]string)}, nil
+	return &MiniWindow{width: w, stdscr: stdscr, texts: make(map[string]string), x: make(map[string]int)}, nil
 
 }
 
@@ -34,60 +34,79 @@ func (w *MiniWindow) draw(label string) {
 	w.stdscr.Erase()
 	// w.stdscr.Border(gc.ACS_VLINE, gc.ACS_VLINE, gc.ACS_HLINE, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS, gc.A_INVIS)
 	w.stdscr.Print(label+":", w.texts[label])
-	w.stdscr.Move(0, len(label)+1+w.x)
+	w.stdscr.Move(0, len(label)+1+w.x[label])
 }
 
 func (w *MiniWindow) moveX(delta int, label string) {
-	w.x = utils.Max(utils.Min(w.x+delta, len(w.texts[label])), 0)
+	w.x[label] = utils.Max(utils.Min(w.x[label]+delta, len(w.texts[label])), 0)
 }
 
-func (w *MiniWindow) run(clear bool, label string) string {
-	if _, ok := w.texts[label]; !ok {
-		w.texts[label] = ""
+func (w *MiniWindow) clear(label string) {
+	w.texts[label] = ""
+	w.x[label] = 0
+}
+
+func (w *MiniWindow) whileRun(clear bool, label string) string {
+	if clear {
+		w.clear(label)
 	}
 
-	if clear {
-		w.texts[label] = ""
-	}
-	w.x = len(w.texts[label])
 	w.draw(label)
 
 	for {
-		k := w.stdscr.GetChar()
+		ch := w.stdscr.GetChar()
 
-		switch k {
+		switch ch {
 		case gc.KEY_ESC:
 			return ""
-		case gc.KEY_LEFT:
-			w.moveX(-1, label)
-		case gc.KEY_RIGHT:
-			w.moveX(1, label)
 		case gc.KEY_ENTER, gc.KEY_RETURN:
 			return w.texts[label]
-		case gc.KEY_TAB:
-			w.texts[label] = w.texts[label][:w.x] + "\t" + w.texts[label][w.x:]
-			w.moveX(1, label)
-		case gc.KEY_END:
-			w.x = len(w.texts[label])
-		case gc.KEY_HOME:
-			w.x = 0
-		case gc.KEY_BACKSPACE:
-			if w.x == 0 {
-				continue
-			}
-			// e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
-			w.moveX(-1, label)
-			w.texts[label] = w.texts[label][:w.x] + w.texts[label][w.x+1:]
 		default:
-			chr := gc.KeyString(k)
-			if len(chr) > 1 {
-				continue
-			}
+			w.run(label, ch)
+		}
+	}
+}
 
-			w.texts[label] = w.texts[label][:w.x] + chr + w.texts[label][w.x:]
-			w.x++
+func (w *MiniWindow) run(label string, input gc.Key) string {
+	if _, ok := w.texts[label]; !ok {
+		w.clear(label)
+	}
+
+	//w.x = len(w.texts[label])
+	//w.draw(label)
+
+	//k := w.stdscr.GetChar()
+
+	switch input {
+	case gc.KEY_ESC:
+		return ""
+	case gc.KEY_LEFT:
+		w.moveX(-1, label)
+	case gc.KEY_RIGHT:
+		w.moveX(1, label)
+	case gc.KEY_ENTER, gc.KEY_RETURN:
+		return w.texts[label]
+	case gc.KEY_END:
+		w.x[label] = len(w.texts[label])
+	case gc.KEY_HOME:
+		w.x[label] = 0
+	case gc.KEY_BACKSPACE:
+		if w.x[label] == 0 {
+			return ""
+		}
+		// e.lines[e.y] = e.lines[e.y][:e.x] + e.lines[e.y][e.x+num:]
+		w.moveX(-1, label)
+		w.texts[label] = w.texts[label][:w.x[label]] + w.texts[label][w.x[label]+1:]
+	default:
+		chr := gc.KeyString(input)
+		if len(chr) > 1 {
+			return ""
 		}
 
-		w.draw(label)
+		w.texts[label] = w.texts[label][:w.x[label]] + chr + w.texts[label][w.x[label]:]
+		w.moveX(1, label)
 	}
+
+	w.draw(label)
+	return ""
 }

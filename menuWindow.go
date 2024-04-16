@@ -2,7 +2,6 @@ package main
 
 import (
 	gc "github.com/rthornton128/goncurses"
-	"log"
 	"strings"
 )
 
@@ -14,6 +13,8 @@ type MenuWindow struct {
 	itemOffSet int
 
 	mark string
+
+	items []MenuItem
 }
 
 type MenuItem struct {
@@ -32,7 +33,7 @@ func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 		return nil, err
 	}
 
-	log.Println("This is the I:", h)
+	//log.Println("This is the I:", h)
 	dwin := stdscr.Derived(h-4, w-2, 3, 1)
 
 	mw := &MenuWindow{
@@ -54,7 +55,7 @@ func (m *MenuWindow) drawBorderAndTitle(title string) {
 	m.stdscr.Refresh()
 }
 
-func (m *MenuWindow) drawMenu(items []MenuItem) {
+func (m *MenuWindow) drawMenu() {
 	m.subWindow.Erase()
 	m.subWindow.Move(0, 0)
 	y, x := m.subWindow.MaxYX()
@@ -65,7 +66,7 @@ func (m *MenuWindow) drawMenu(items []MenuItem) {
 		m.itemOffSet = m.selected
 	}
 
-	for i, item := range items[m.itemOffSet:] {
+	for i, item := range m.items[m.itemOffSet:] {
 		if i >= y {
 			break
 		}
@@ -92,33 +93,37 @@ func (m *MenuWindow) drawMenu(items []MenuItem) {
 	m.subWindow.Refresh()
 }
 
-func (m *MenuWindow) run(items []MenuItem, title string) (string, error) {
+func (m *MenuWindow) draw(title string) {
+	m.drawBorderAndTitle(title)
+	m.drawMenu()
+}
+
+func (m *MenuWindow) setItems(items []MenuItem) {
+	m.items = items
+	m.selected = 0
+	m.itemOffSet = 0
+}
+
+func (m *MenuWindow) run(input gc.Key) string {
 	gc.Cursor(0)
 	defer gc.Cursor(1)
 
-	m.drawBorderAndTitle(title)
-	m.selected = 0
-	m.itemOffSet = 0
-	for {
-		m.drawMenu(items)
-		ch := m.stdscr.GetChar()
+	switch input {
+	case gc.KEY_ENTER, gc.KEY_RETURN:
+		return m.items[m.selected].label
+	case gc.KEY_ESC:
+		return ""
+	case gc.KEY_DOWN:
+		m.selected++
 
-		switch ch {
-		case gc.KEY_ENTER, gc.KEY_RETURN:
-			return items[m.selected].label, nil
-		case gc.KEY_ESC:
-			return "", nil
-		case gc.KEY_DOWN:
-			m.selected++
-
-			if m.selected > len(items)-1 {
-				m.selected = 0
-			}
-		case gc.KEY_UP:
-			m.selected--
-			if m.selected < 0 {
-				m.selected = len(items) - 1
-			}
+		if m.selected > len(m.items)-1 {
+			m.selected = 0
+		}
+	case gc.KEY_UP:
+		m.selected--
+		if m.selected < 0 {
+			m.selected = len(m.items) - 1
 		}
 	}
+	return ""
 }
