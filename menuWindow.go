@@ -45,18 +45,15 @@ func NewMenuWindow(y, x, h, w int) (*MenuWindow, error) {
 }
 
 func (m *MenuWindow) drawBorderAndTitle(title string) {
-	m.stdscr.Erase()
 	_, x := m.stdscr.MaxYX()
 	m.stdscr.Box(0, 0)
 	m.stdscr.MovePrint(1, (x/2)-(len(title)/2), title)
 	m.stdscr.MoveAddChar(2, 0, gc.ACS_LTEE)
 	m.stdscr.HLine(2, 1, gc.ACS_HLINE, x-2)
 	m.stdscr.MoveAddChar(2, x-1, gc.ACS_RTEE)
-	m.stdscr.Refresh()
 }
 
 func (m *MenuWindow) drawMenu() {
-	m.subWindow.Erase()
 	m.subWindow.Move(0, 0)
 	y, x := m.subWindow.MaxYX()
 
@@ -90,12 +87,13 @@ func (m *MenuWindow) drawMenu() {
 			DisableColor(m.subWindow, item.color)
 		}
 	}
-	m.subWindow.Refresh()
 }
 
 func (m *MenuWindow) draw(title string) {
+	m.stdscr.Erase()
 	m.drawBorderAndTitle(title)
 	m.drawMenu()
+	m.stdscr.Refresh()
 }
 
 func (m *MenuWindow) setItems(items []MenuItem) {
@@ -105,8 +103,8 @@ func (m *MenuWindow) setItems(items []MenuItem) {
 }
 
 func (m *MenuWindow) run(input gc.Key) string {
-	gc.Cursor(0)
-	defer gc.Cursor(1)
+	//gc.Cursor(0)
+	//defer gc.Cursor(1)
 
 	switch input {
 	case gc.KEY_ENTER, gc.KEY_RETURN:

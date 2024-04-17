@@ -18,7 +18,7 @@ func NewFileMenuWindow(y, x, h, w int) (*FileMenuWindow, error) {
 		return nil, err
 	}
 
-	searchWindow, err := NewMiniWindow(y+h, x, 1, w)
+	searchWindow, err := NewMiniWindow(y+h+2, x, 2, w)
 	if err != nil {
 		return nil, err
 	}
@@ -71,25 +71,31 @@ func (w *FileMenuWindow) run() (string, error) {
 	gc.Cursor(0)
 	defer gc.Cursor(1)
 	currentPath := "."
-	lastPath := ""
+	updateItems := true
 	for {
 		menuItems, err := w.getFiles(currentPath)
 		if err != nil {
 			return "", err
 		}
 
-		if currentPath != lastPath {
+		if updateItems {
 			w.menuWindow.setItems(menuItems)
-			lastPath = currentPath
+			updateItems = false
 		}
 
 		w.menuWindow.draw(currentPath)
+		w.searchWindow.draw(">")
 
 		ch := w.menuWindow.stdscr.GetChar() // TODO: dirt
 		switch ch {
 		case gc.KEY_ESC:
-			return "", nil
-		case gc.KEY_DOWN, gc.KEY_UP, gc.KEY_ENTER:
+			if currentPath == "." {
+				return "", nil
+			}
+
+			currentPath = filepath.Dir(currentPath)
+			updateItems = true
+		case gc.KEY_DOWN, gc.KEY_UP, gc.KEY_ENTER, gc.KEY_RETURN:
 			selected := w.menuWindow.run(ch)
 			if selected == "" {
 				continue
@@ -104,12 +110,9 @@ func (w *FileMenuWindow) run() (string, error) {
 			if !info.IsDir() {
 				return currentPath, nil
 			}
-			// TODO: you are here, fix this
+			updateItems = true
 		default:
-			searchString := w.searchWindow.run(">", ch)
-			if searchString == "" {
-				continue
-			}
+			w.searchWindow.run(">", ch)
 		}
 
 		//e.draw()
