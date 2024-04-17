@@ -8,8 +8,7 @@ import (
 )
 
 type FileMenuWindow struct {
-	menuWindow   *MenuWindow
-	searchWindow *MiniWindow
+	menuWindow *MenuWindow
 }
 
 func NewFileMenuWindow(y, x, h, w int) (*FileMenuWindow, error) {
@@ -18,14 +17,8 @@ func NewFileMenuWindow(y, x, h, w int) (*FileMenuWindow, error) {
 		return nil, err
 	}
 
-	searchWindow, err := NewMiniWindow(y+h+2, x, 2, w)
-	if err != nil {
-		return nil, err
-	}
-
 	mw := &FileMenuWindow{
-		menuWindow:   menuWindow,
-		searchWindow: searchWindow,
+		menuWindow: menuWindow,
 	}
 	return mw, nil
 }
@@ -72,6 +65,7 @@ func (w *FileMenuWindow) run() (string, error) {
 	defer gc.Cursor(1)
 	currentPath := "."
 	updateItems := true
+	searchString := ""
 	for {
 		menuItems, err := w.getFiles(currentPath)
 		if err != nil {
@@ -83,8 +77,12 @@ func (w *FileMenuWindow) run() (string, error) {
 			updateItems = false
 		}
 
-		w.menuWindow.draw(currentPath)
-		w.searchWindow.draw(">")
+		title := currentPath
+		if searchString != "" {
+			title = searchString
+		}
+
+		w.menuWindow.draw(title)
 
 		ch := w.menuWindow.stdscr.GetChar() // TODO: dirt
 		switch ch {
@@ -111,8 +109,21 @@ func (w *FileMenuWindow) run() (string, error) {
 				return currentPath, nil
 			}
 			updateItems = true
+		case gc.KEY_BACKSPACE:
+			if searchString == "" {
+				continue
+			}
+
+			searchString = searchString[:len(searchString)-1]
+
 		default:
-			w.searchWindow.run(">", ch)
+			chr := gc.KeyString(ch)
+			if len(chr) > 1 {
+				continue
+			}
+
+			searchString += chr
+			updateItems = true
 		}
 
 		//e.draw()
