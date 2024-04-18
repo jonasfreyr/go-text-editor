@@ -1,14 +1,20 @@
 package main
 
 import (
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	gc "github.com/rthornton128/goncurses"
+	"github.com/yireyun/go-queue"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 type FileMenuWindow struct {
 	menuWindow *MenuWindow
+
+	subFiles []string
 }
 
 func NewFileMenuWindow(y, x, h, w int) (*FileMenuWindow, error) {
@@ -60,14 +66,79 @@ func (w *FileMenuWindow) getFiles(currentPath string) ([]MenuItem, error) {
 	return menuItems, nil
 }
 
+func (w *FileMenuWindow) updateAllSubFilesAndDirectories(path string) error {
+	before := time.Now()
+
+	w.subFiles = make([]string, 0)
+
+	q := queue.NewQueue(1000)
+	q.Put(path)
+
+	for q.Quantity() > 0 {
+		c, _, _ := q.Get()
+
+		currentPath, _ := c.(string)
+		fi, err := os.ReadDir(currentPath)
+		if err != nil {
+			return err
+		}
+		for _, subFile := range fi {
+			name := filepath.Join(currentPath, subFile.Name())
+
+			// log.Println("you got mail:", name)
+
+			if subFile.IsDir() {
+				q.Put(name)
+				continue
+			}
+			w.subFiles = append(w.subFiles, name)
+		}
+
+	}
+
+	log.Println("walk: ", time.Since(before))
+	return nil
+}
+
+func (w *FileMenuWindow) fuzzyFind(searchString string) ([]MenuItem, error) {
+
+	res := fuzzy.Find(searchString, w.subFiles)
+
+	config := GetEditorConfig()
+
+	menuItems := make([]MenuItem, len(res))
+	for i, path := range res {
+		menuItems[i] = MenuItem{
+			label: path,
+			color: config.FileColor.Color,
+		}
+	}
+
+	return menuItems, nil
+}
+
 func (w *FileMenuWindow) run() (string, error) {
 	gc.Cursor(0)
 	defer gc.Cursor(1)
 	currentPath := "."
 	updateItems := true
+	updateSubFiles := true
 	searchString := ""
 	for {
-		menuItems, err := w.getFiles(currentPath)
+		var menuItems []MenuItem
+		var err error
+
+		if updateSubFiles {
+			err = w.updateAllSubFilesAndDirectories(currentPath)
+			updateSubFiles = false
+		}
+
+		if searchString == "" {
+			menuItems, err = w.getFiles(currentPath)
+		} else {
+			menuItems, err = w.fuzzyFind(searchString)
+		}
+
 		if err != nil {
 			return "", err
 		}
@@ -93,6 +164,7 @@ func (w *FileMenuWindow) run() (string, error) {
 
 			currentPath = filepath.Dir(currentPath)
 			updateItems = true
+			updateSubFiles = true
 		case gc.KEY_DOWN, gc.KEY_UP, gc.KEY_ENTER, gc.KEY_RETURN:
 			selected := w.menuWindow.run(ch)
 			if selected == "" {
@@ -109,13 +181,14 @@ func (w *FileMenuWindow) run() (string, error) {
 				return currentPath, nil
 			}
 			updateItems = true
+			updateSubFiles = true
 		case gc.KEY_BACKSPACE:
 			if searchString == "" {
 				continue
 			}
 
 			searchString = searchString[:len(searchString)-1]
-
+			updateItems = true
 		default:
 			chr := gc.KeyString(ch)
 			if len(chr) > 1 {

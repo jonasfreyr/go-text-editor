@@ -72,7 +72,7 @@ func (m *MenuWindow) drawMenu() {
 		itemLabel := item.label
 
 		if len(itemLabel)+len(m.mark) >= x {
-			itemLabel = itemLabel[:x]
+			itemLabel = itemLabel[len(itemLabel)+len(m.mark)-x:]
 		}
 
 		if m.selected == i+m.itemOffSet {

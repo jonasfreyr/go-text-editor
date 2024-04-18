@@ -26,3 +26,19 @@ func Reverse[K any](arr []K) []K {
 	}
 	return newArray
 }
+
+type Queue []int
+
+func (q *Queue) Enqueue(item int) {
+	*q = append(*q, item)
+}
+
+func (q *Queue) Dequeue() int {
+	item := (*q)[0]
+	*q = (*q)[1:]
+	return item
+}
+
+func (q *Queue) IsEmpty() bool {
+	return len(*q) == 0
+}
