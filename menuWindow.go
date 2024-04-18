@@ -71,8 +71,8 @@ func (m *MenuWindow) drawMenu() {
 
 		itemLabel := item.label
 
-		if len(itemLabel)+len(m.mark) >= x {
-			itemLabel = itemLabel[len(itemLabel)+len(m.mark)-x:]
+		if len(itemLabel)+len(m.mark) >= x-2 {
+			itemLabel = itemLabel[len(itemLabel)+len(m.mark)+2-x:]
 		}
 
 		if m.selected == i+m.itemOffSet {
@@ -84,7 +84,7 @@ func (m *MenuWindow) drawMenu() {
 			m.subWindow.AttrOff(gc.A_REVERSE)
 		} else {
 			EnableColor(m.subWindow, item.color)
-			m.subWindow.Println(strings.Repeat(" ", len(m.mark)) + itemLabel)
+			m.subWindow.Println(strings.Repeat(" ", len(m.mark)) + strings.ReplaceAll(strings.ReplaceAll(itemLabel, "\r", ""), "\n", ""))
 			DisableColor(m.subWindow, item.color)
 		}
 	}
