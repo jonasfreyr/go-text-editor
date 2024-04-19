@@ -52,7 +52,6 @@ func (w *MiniWindow) whileRun(clear bool, label string) string {
 	}
 
 	w.draw(label)
-
 	for {
 		ch := w.stdscr.GetChar()
 

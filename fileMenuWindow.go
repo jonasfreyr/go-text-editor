@@ -8,13 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
 type FileMenuWindow struct {
 	menuWindow *MenuWindow
 
-	subFiles []string
+	subFiles map[string][]string
 }
 
 func NewFileMenuWindow(y, x, h, w int) (*FileMenuWindow, error) {
@@ -69,7 +70,7 @@ func (w *FileMenuWindow) getFiles(currentPath string) ([]MenuItem, error) {
 func (w *FileMenuWindow) updateAllSubFilesAndDirectories(path string) error {
 	before := time.Now()
 
-	w.subFiles = make([]string, 0)
+	w.subFiles = make(map[string][]string)
 
 	q := queue.NewQueue(1000)
 	q.Put(path)
@@ -78,6 +79,8 @@ func (w *FileMenuWindow) updateAllSubFilesAndDirectories(path string) error {
 		c, _, _ := q.Get()
 
 		currentPath, _ := c.(string)
+		w.subFiles[currentPath] = make([]string, 0)
+
 		fi, err := os.ReadDir(currentPath)
 		if err != nil {
 			return err
@@ -91,18 +94,27 @@ func (w *FileMenuWindow) updateAllSubFilesAndDirectories(path string) error {
 				q.Put(name)
 				continue
 			}
-			w.subFiles = append(w.subFiles, name)
+			w.subFiles[currentPath] = append(w.subFiles[currentPath], name)
 		}
-
 	}
 
 	log.Println("walk: ", time.Since(before))
 	return nil
 }
 
-func (w *FileMenuWindow) fuzzyFind(searchString string) ([]MenuItem, error) {
+func (w *FileMenuWindow) getAllSublists(path string) []string {
+	res := make([]string, 0)
+	for key, vals := range w.subFiles {
+		if strings.Contains(key, path) || path == "." {
+			res = append(res, vals...)
+		}
+	}
+	return res
+}
 
-	res := fuzzy.Find(searchString, w.subFiles)
+func (w *FileMenuWindow) fuzzyFind(searchString, path string) ([]MenuItem, error) {
+	subFiles := w.getAllSublists(path)
+	res := fuzzy.Find(searchString, subFiles)
 
 	config := GetEditorConfig()
 
@@ -122,21 +134,17 @@ func (w *FileMenuWindow) run() (string, error) {
 	defer gc.Cursor(1)
 	currentPath := "."
 	updateItems := true
-	updateSubFiles := true
 	searchString := ""
+	err := w.updateAllSubFilesAndDirectories(currentPath)
+	if err != nil {
+		return "", err
+	}
 	for {
 		var menuItems []MenuItem
-		var err error
-
-		if updateSubFiles {
-			err = w.updateAllSubFilesAndDirectories(currentPath)
-			updateSubFiles = false
-		}
-
 		if searchString == "" {
 			menuItems, err = w.getFiles(currentPath)
 		} else {
-			menuItems, err = w.fuzzyFind(searchString)
+			menuItems, err = w.fuzzyFind(searchString, currentPath)
 		}
 
 		if err != nil {
@@ -164,7 +172,6 @@ func (w *FileMenuWindow) run() (string, error) {
 
 			currentPath = filepath.Dir(currentPath)
 			updateItems = true
-			updateSubFiles = true
 		case gc.KEY_DOWN, gc.KEY_UP, gc.KEY_ENTER, gc.KEY_RETURN:
 			selected := w.menuWindow.run(ch)
 			if selected == "" {
@@ -181,7 +188,6 @@ func (w *FileMenuWindow) run() (string, error) {
 				return currentPath, nil
 			}
 			updateItems = true
-			updateSubFiles = true
 		case gc.KEY_BACKSPACE:
 			if searchString == "" {
 				continue
