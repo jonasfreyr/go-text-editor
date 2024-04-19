@@ -281,9 +281,6 @@ func (e *Editor) Init() {
 		//e.debugLog(err)
 	}
 
-	// TODO: I hate this
-	//TabWidth = config.TabWidth
-
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 	//if DEBUG_MODE {
 	//	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 2, e.config.LineNumberWidth)
@@ -1195,6 +1192,13 @@ func (e *Editor) runTerminal() {
 		command := e.terminalWindow.whileRun(true, ">")
 		if command == "" {
 			break
+		}
+		commandAndArgs := strings.Split(command, " ")
+
+		if len(commandAndArgs) == 1 {
+			e.executeTerminalCommand(command)
+		} else {
+			e.executeTerminalCommand(commandAndArgs[0], commandAndArgs[1:]...)
 		}
 	}
 }
