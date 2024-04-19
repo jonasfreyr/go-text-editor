@@ -116,6 +116,10 @@ func (w *FileMenuWindow) fuzzyFind(searchString, path string) ([]MenuItem, error
 	subFiles := w.getAllSublists(path)
 	res := fuzzy.Find(searchString, subFiles)
 
+	sort.Slice(res, func(i, j int) bool {
+		return len(res[i]) < len(res[j])
+	})
+
 	config := GetEditorConfig()
 
 	menuItems := make([]MenuItem, len(res))
