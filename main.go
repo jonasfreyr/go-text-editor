@@ -1238,10 +1238,8 @@ func (e *Editor) Run() error {
 			return nil
 		case 559, 563: // ALT + Right
 			e.switchFile(1)
-
 		case 544, 548: // ALT + Left
 			e.switchFile(-1)
-
 		case 562, 566: // CTRL + Shift + Right
 			e.ctrlMoveRight()
 			resetSelected = false

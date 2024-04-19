@@ -58,10 +58,10 @@ func (w *FileMenuWindow) getFiles(currentPath string) ([]MenuItem, error) {
 
 	menuItems := make([]MenuItem, 0)
 	for _, name := range directoryNames {
-		menuItems = append(menuItems, MenuItem{label: name, color: config.FolderColor.Color})
+		menuItems = append(menuItems, MenuItem{label: name, value: filepath.Join(currentPath, name), color: config.FolderColor.Color})
 	}
 	for _, name := range fileNames {
-		menuItems = append(menuItems, MenuItem{label: name, color: config.FileColor.Color})
+		menuItems = append(menuItems, MenuItem{label: name, value: filepath.Join(currentPath, name), color: config.FileColor.Color})
 	}
 
 	return menuItems, nil
@@ -123,6 +123,7 @@ func (w *FileMenuWindow) fuzzyFind(searchString, path string) ([]MenuItem, error
 		menuItems[i] = MenuItem{
 			label: path,
 			color: config.FileColor.Color,
+			value: path,
 		}
 	}
 
@@ -178,12 +179,12 @@ func (w *FileMenuWindow) run() (string, error) {
 				continue
 			}
 
-			info, err := os.Stat(filepath.Join(currentPath, selected))
+			info, err := os.Stat(selected)
 			if err != nil {
 				return "", err
 			}
 
-			currentPath = filepath.Join(currentPath, selected)
+			currentPath = selected
 			if !info.IsDir() {
 				return currentPath, nil
 			}

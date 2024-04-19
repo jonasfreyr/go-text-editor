@@ -19,6 +19,7 @@ type MenuWindow struct {
 
 type MenuItem struct {
 	label string
+	value string
 	color [3]int
 }
 
@@ -109,7 +110,7 @@ func (m *MenuWindow) run(input gc.Key) string {
 
 	switch input {
 	case gc.KEY_ENTER, gc.KEY_RETURN:
-		return m.items[m.selected].label
+		return m.items[m.selected].value
 	case gc.KEY_ESC:
 		return ""
 	case gc.KEY_DOWN:
