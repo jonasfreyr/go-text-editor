@@ -267,9 +267,9 @@ func (e *Editor) Init() {
 
 	e.cleanUps = make([]func(), 0)
 
-	e.addCleanUpFunc(func() {
-		e.debugLog("test")
-	})
+	//e.addCleanUpFunc(func() {
+	//	e.debugLog("test")
+	//})
 
 	if err != nil {
 		log.Fatal("init", err)
@@ -1446,7 +1446,7 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Failed to save!")
 			} else {
 				e.drawHeader()
-				e.popupWindow.pop("Saved!")
+				// e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
 			if !e.terminalOpened {
@@ -1543,6 +1543,7 @@ func (e *Editor) Run() error {
 
 			e.moveY(1)
 			e.moveXto(0)
+			e.modified[e.path] = true
 		case gc.KEY_TAB:
 			if e.selected != "" {
 				e.removeSelection()
