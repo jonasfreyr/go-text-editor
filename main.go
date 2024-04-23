@@ -36,6 +36,8 @@ type Editor struct {
 	printLineStartIndex int
 	printLinesIndex     int
 
+	headerOffset int
+
 	lines []string
 	lexer *Lexer
 
@@ -460,21 +462,7 @@ func (e *Editor) drawHeader() {
 	e.headerscr.MoveAddChar(1, config.LineNumberWidth-1, gc.ACS_TTEE)
 	e.headerscr.Move(0, 0)
 
-	x := 0
-	offset := 0
-	for _, path := range e.openedFiles {
-		name := e.openPathsToNames[path]
-		if e.modified[path] {
-			name = "*" + name
-		}
-
-		if path == e.path && x+len(name) > maxX {
-			offset = x + len(name) - maxX + 1
-			break
-		}
-		x += len(name) + 1
-	}
-	x = -offset
+	x := -e.headerOffset
 	cut := false
 	for _, path := range e.openedFiles {
 		if x >= maxX {
@@ -946,6 +934,33 @@ func (e *Editor) exitFile(path string) {
 	e.current = utils.Index(e.openedFiles, e.path)
 }
 
+func (e *Editor) calculateHeaderOffset() {
+	_, maxX := e.headerscr.MaxYX()
+	x := -e.headerOffset
+	for _, path := range e.openedFiles {
+		name := e.openPathsToNames[path]
+		if e.modified[path] {
+			name = "*" + name
+		}
+
+		if path == e.path && x+len(name) > maxX {
+			xWithoutOffset := x + e.headerOffset
+			e.headerOffset = xWithoutOffset + len(name) - maxX + 1
+			break
+		} else if path == e.path && x < 0 {
+			xWithoutOffset := x + e.headerOffset
+			if xWithoutOffset == 0 {
+				e.headerOffset = 0
+			} else {
+				e.headerOffset = xWithoutOffset - 1
+			}
+
+			break
+		}
+		x += len(name) + 1
+	}
+}
+
 func (e *Editor) Load(filePath string) error {
 	if e.path != "" && e.modified[e.path] {
 		if _, ok := e.tempFilePaths[e.path]; !ok {
@@ -1035,6 +1050,8 @@ func (e *Editor) Load(filePath string) error {
 	} else {
 		e.current = utils.Index(e.openedFiles, filePath)
 	}
+
+	e.calculateHeaderOffset()
 
 	e.draw()
 
