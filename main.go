@@ -453,38 +453,71 @@ func (e *Editor) drawHeader() {
 	config := GetEditorConfig()
 
 	_, maxX := e.headerscr.MaxYX()
+	maxX--
 
 	e.headerscr.Erase()
 	e.headerscr.HLine(1, 0, 0, maxX)
 	e.headerscr.MoveAddChar(1, config.LineNumberWidth-1, gc.ACS_TTEE)
 	e.headerscr.Move(0, 0)
 
+	x := 0
+	offset := 0
 	for _, path := range e.openedFiles {
-		//e.debugLog("drawing: ", path)
 		name := e.openPathsToNames[path]
 		if e.modified[path] {
 			name = "*" + name
 		}
 
+		if path == e.path && x+len(name) > maxX {
+			offset = x + len(name) - maxX + 1
+			break
+		}
+		x += len(name) + 1
+	}
+	x = -offset
+	cut := false
+	for _, path := range e.openedFiles {
+		if x >= maxX {
+			break
+		}
+
+		name := e.openPathsToNames[path]
+		if e.modified[path] {
+			name = "*" + name
+		}
+
+		if x < 0 {
+			if x+len(name)+1 < 0 {
+				x += len(name) + 1
+				continue
+			}
+
+			name = name[-x:]
+			x = 0
+		}
+
+		if x+len(name) >= maxX {
+			over := x + len(name) - maxX
+			log.Println("over:", over)
+			name = name[:len(name)-over]
+			cut = true
+		}
+
 		if path == e.path {
 			e.headerscr.AttrOn(gc.A_REVERSE)
-			e.headerscr.Print(name)
+			e.headerscr.MovePrint(0, x, name)
 			e.headerscr.AttrOff(gc.A_REVERSE)
 		} else {
-			e.headerscr.Print(name)
+			e.headerscr.MovePrint(0, x, name)
 		}
-		_, x := e.headerscr.CursorYX()
-		e.headerscr.VLine(0, x, 0, 1)
-		// e.headerscr.MoveAddChar(1, x, gc.ACS_BTEE)
-		e.headerscr.Move(0, x+1)
-		//e.headerscr.Print(" ")
-	}
-	//e.headerscr.VLine(0, maxX, 0, 1)
 
-	//if e.terminalOpened {
-	//	//e.headerscr.VLine(0, maxX-1, 0, maxY)
-	//	e.headerscr.MoveAddChar(1, maxX, gc.ACS_RTEE)
-	//}
+		if cut {
+			break
+		}
+		_, curX := e.headerscr.CursorYX()
+		e.headerscr.VLine(0, curX, 0, 1)
+		x += len(name) + 1
+	}
 	e.headerscr.Refresh()
 }
 func (e *Editor) drawLineNumbers() {

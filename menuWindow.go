@@ -110,6 +110,10 @@ func (m *MenuWindow) run(input gc.Key) string {
 
 	switch input {
 	case gc.KEY_ENTER, gc.KEY_RETURN:
+		if len(m.items) == 0 {
+			return ""
+		}
+
 		return m.items[m.selected].value
 	case gc.KEY_ESC:
 		return ""
