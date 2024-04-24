@@ -717,6 +717,10 @@ func (e *Editor) removeText(y, x, num int) string {
 func (e *Editor) remove(y, x, num int) {
 	e.modified[e.path] = true
 
+	if num == 0 {
+		return
+	}
+
 	// TODO: will needs some fixing to work with nums larger than 1
 	if x == 0 {
 		if y == 0 {
@@ -851,9 +855,7 @@ func (e *Editor) addLines(y int, lines []string) {
 }
 
 func (e *Editor) addLinesText(y int, lines []string) {
-	//e.debugLog("lines:", len(e.lines))
-
-	// e.lines = slices.Insert(e.lines, y, lines...)
+	e.modified[e.path] = true
 	newList := make([]string, len(e.lines)+len(lines))
 	copy(newList, e.lines[:y])
 	for i := 0; i < len(lines); i++ {
@@ -865,6 +867,7 @@ func (e *Editor) addLinesText(y int, lines []string) {
 	}
 
 	e.lines = newList
+	e.debugLog("len:", len(e.lines))
 }
 func (e *Editor) deleteLinesText(y, num int) (text string) {
 	e.modified[e.path] = true
