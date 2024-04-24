@@ -6,6 +6,7 @@ const (
 	INSERT ActionType = iota
 	DELETE
 	DELETE_LINE
+	ADD_LINE
 )
 
 type Action struct {

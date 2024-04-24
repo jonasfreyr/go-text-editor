@@ -706,10 +706,12 @@ func (e *Editor) removeSelection() {
 // Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
 // If you desire to remove multiple lines use deleteLines
 func (e *Editor) removeText(y, x, num int) string {
-	text := e.lines[y][x-num : x]
+	e.debugLog("before:", e.lines[y])
 	x -= num
+	text := e.lines[y][x : x+num]
 
 	e.lines[y] = e.lines[y][:x] + e.lines[y][x+num:]
+	e.debugLog("after:", e.lines[y])
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
@@ -729,6 +731,8 @@ func (e *Editor) remove(y, x, num int) {
 	}
 
 	text := e.removeText(y, x, num)
+
+	e.debugLog("this is the text:", text)
 
 	if text != "" {
 		ta := Action{
@@ -789,11 +793,13 @@ func (e *Editor) undoTransaction() {
 		switch action.actionType {
 		case DELETE_LINE:
 			lines := strings.Split(action.text, "\n")
-			e.addLines(action.location.line, lines)
+			e.addLinesText(action.location.line, lines)
 		case DELETE:
 			e.insertText(action.location.line, action.location.col, action.text)
 		case INSERT:
 			e.removeText(action.location.line, action.location.col+action.amount, action.amount)
+		case ADD_LINE:
+			e.deleteLinesText(action.location.line, action.amount)
 		}
 	}
 	e.moveYto(ta.location.line)
@@ -821,13 +827,31 @@ func (e *Editor) redoTransaction() {
 			e.removeText(action.location.line, action.location.col+len(action.text), len(action.text))
 		case INSERT:
 			e.insertText(action.location.line, action.location.col, action.text)
+		case ADD_LINE:
+			lines := strings.Split(action.text, "\n")
+			e.addLinesText(action.location.line, lines)
 		}
 	}
 	e.moveYto(ta.location.line)
 	e.moveXto(ta.location.col)
 }
 func (e *Editor) addLines(y int, lines []string) {
-	e.debugLog("lines:", len(e.lines))
+	e.addLinesText(y, lines)
+
+	ta := Action{
+		location: Location{
+			line: y,
+		},
+		actionType: ADD_LINE,
+		amount:     len(lines),
+		text:       strings.Join(lines, "\n"),
+	}
+
+	e.transactions.addAction(ta)
+}
+
+func (e *Editor) addLinesText(y int, lines []string) {
+	//e.debugLog("lines:", len(e.lines))
 
 	// e.lines = slices.Insert(e.lines, y, lines...)
 	newList := make([]string, len(e.lines)+len(lines))
@@ -1256,10 +1280,10 @@ func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		before := time.Now()
+		//before := time.Now()
 
 		//before := time.Now()
-		e.debugLog(key, gc.KeyString(key))
+		//e.debugLog(key, gc.KeyString(key))
 
 		updateLengthIndex := true
 		resetSelected := true
@@ -1528,22 +1552,12 @@ func (e *Editor) Run() error {
 				e.removeSelection()
 			}
 
-			newLine := e.lines[e.y][:e.x]
-			e.lines[e.y] = e.lines[e.y][e.x:]
-
-			before := make([]string, len(e.lines[:e.y]))
-			copy(before, e.lines[:e.y])
-
-			before = append(before, newLine)
-
-			rest := make([]string, len(e.lines[e.y:]))
-			copy(rest, e.lines[e.y:])
-
-			e.lines = append(before, rest...)
+			newLine := e.lines[e.y][e.x:]
+			e.remove(e.y, len(e.lines[e.y]), len(e.lines[e.y])-e.x)
+			e.addLines(e.y+1, []string{newLine})
 
 			e.moveY(1)
 			e.moveXto(0)
-			e.modified[e.path] = true
 		case gc.KEY_TAB:
 			if e.selected != "" {
 				e.removeSelection()
@@ -1602,7 +1616,7 @@ func (e *Editor) Run() error {
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
 		//e.debugLog("run took:", time.Since(before))
 		e.draw()
-		e.debugLog("Total time:", time.Since(before))
+		//e.debugLog("Total time:", time.Since(before))
 		e.transactions.submit(beforeY, beforeX)
 	}
 }
