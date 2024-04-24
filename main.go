@@ -24,7 +24,6 @@ type Editor struct {
 	stdscr    *gc.Window
 	lineNrscr *gc.Window
 	headerscr *gc.Window
-	// unsavedscr *gc.Window
 
 	maxX, maxY int
 
@@ -76,11 +75,7 @@ type Editor struct {
 var DEBUG_MODE = false
 
 func filterEscapeCodes(input string) string {
-	//re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\[\?[0-9]*[a-zA-Z]|\x1b\][0-9]*;`)
-
 	return strings.ReplaceAll(stripansi.Strip(input), "\r", "")
-
-	//return re.ReplaceAllString(input, "")
 }
 
 func (e *Editor) captureTerminalOutput() {
@@ -216,22 +211,6 @@ func (e *Editor) initTerminal() error {
 		e.debugLog("terminal process killed")
 	})
 
-	//e.debugLog("Before write")
-
-	//for i := 0; i < 2; i++ {
-	//	e.cmd.Write([]byte("ls\r"))
-	//
-	//	e.debugLog("After write")
-	//	time.Sleep(time.Second)
-	//
-	//	b := make([]byte, 1024)
-	//	_, err = e.cmd.Read(b)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	e.debugLog(string(b))
-	////}
-
 	maxY, maxX := e.terminalscr.MaxYX()
 	err = pty.Setsize(e.cmd, &pty.Winsize{
 		Rows: uint16(maxY),
@@ -242,10 +221,6 @@ func (e *Editor) initTerminal() error {
 	if err != nil {
 		return err
 	}
-	//err = pty.InheritSize(e.terminalscr, e.cmd) // Set size of fake terminal
-	//if err != nil {
-	//	return err
-	//}
 
 	go e.captureTerminalOutput()
 
@@ -267,10 +242,6 @@ func (e *Editor) Init() {
 
 	e.cleanUps = make([]func(), 0)
 
-	//e.addCleanUpFunc(func() {
-	//	e.debugLog("test")
-	//})
-
 	if err != nil {
 		log.Fatal("init", err)
 	}
@@ -278,29 +249,8 @@ func (e *Editor) Init() {
 	ReadEditorConfig()
 	config := GetEditorConfig()
 
-	if err != nil {
-		log.Println(err)
-		//e.debugLog(err)
-	}
-
 	e.maxY, e.maxX = e.stdscr.MaxYX()
-	//if DEBUG_MODE {
-	//	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX*3/5, 2, e.config.LineNumberWidth)
-	//	if err != nil {
-	//		e.End()
-	//		log.Fatal(err)
-	//	}
-	//
-	//	e.terminalscr, err = gc.NewWindow(e.maxY, e.maxX*3/5-e.config.LineNumberWidth, 0, e.maxX*3/5+e.config.LineNumberWidth)
-	//	e.terminalscr.ScrollOk(true)
-	//	if err != nil {
-	//		e.End()
-	//		log.Fatal(err)
-	//	}
-	//
-	//	e.maxY, e.maxX = e.stdscr.MaxYX()
-	//
-	//} else {
+
 	e.stdscr, err = gc.NewWindow(e.maxY, e.maxX-config.LineNumberWidth, 2, config.LineNumberWidth)
 	if err != nil {
 		e.End()
@@ -316,8 +266,6 @@ func (e *Editor) Init() {
 	}
 	e.maxY, e.maxX = e.stdscr.MaxYX()
 
-	// }
-
 	e.lineNrscr, err = gc.NewWindow(e.maxY, config.LineNumberWidth, 2, 0)
 	if err != nil {
 		e.End()
@@ -329,12 +277,6 @@ func (e *Editor) Init() {
 		e.End()
 		log.Fatal(err)
 	}
-
-	//e.unsavedscr, err = gc.NewWindow(2, e.config.LineNumberWidth-1, 0, 0)
-	//if err != nil {
-	//	e.End()
-	//	log.Fatal(err)
-	//}
 
 	e.lexer, err = NewLexer()
 	if err != nil {
@@ -359,37 +301,11 @@ func (e *Editor) Init() {
 
 	gc.SetTabSize(config.TabWidth)
 
-	//go func() {
-	//	count := 0
-	//	for {
-	//		time.Sleep(time.Millisecond * 200)
-	//		e.debugLog(fmt.Sprintf("test-%d", count))
-	//		count++
-	//	}
-	//}()
-
-	//mw, err := gc.NewWindow(1, e.maxX, e.maxY-1, 4)
-	//if err != nil {
-	//	e.End()
-	//	log.Fatal(err)
-	//}
-	//
-	//err = mw.Keypad(true)
-	//if err != nil {
-	//	e.End()
-	//	log.Fatal(err)
-	//}
-
 	e.miniWindow, err = NewMiniWindow(e.maxY-1, 4, 1, e.maxX)
 	if err != nil {
 		e.End()
 		log.Fatal(err)
 	}
-	//e.miniWindow = &MiniWindow{
-	//	width:  e.maxX,
-	//	stdscr: mw,
-	//	texts:  make(map[string]string),
-	//}
 
 	_, terminalWidth := e.terminalscr.MaxYX()
 	e.terminalWindow, err = NewMiniWindow(e.maxY-1, terminalXpos, e.maxY-1, terminalWidth)
@@ -397,12 +313,6 @@ func (e *Editor) Init() {
 		e.End()
 		log.Fatal(err)
 	}
-	//tw, err := gc.NewWindow(1, terminalWidth, e.maxY-1, terminalXpos)
-	//e.terminalWindow = &MiniWindow{
-	//	width:  terminalWidth,
-	//	stdscr: tw,
-	//	texts:  make(map[string]string),
-	//}
 
 	e.lines = make([]string, 1)
 	e.terminalLines = make([]string, 0)
@@ -428,8 +338,6 @@ func (e *Editor) Init() {
 		e.End()
 		log.Fatal(err)
 	}
-
-	//e.debugLog("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 }
 func (e *Editor) isSelected(startX, endX, startY, endY, line, col int) bool {
 	if startX == endX && startY == endY {
@@ -541,7 +449,6 @@ func (e *Editor) accountForTabs(x, y int) int {
 	return newX
 }
 func (e *Editor) draw() {
-	// before := time.Now()
 	config := GetEditorConfig()
 
 	accountedForTabs := e.accountForTabs(e.x, e.y)
@@ -572,7 +479,6 @@ func (e *Editor) draw() {
 	}
 	e.drawLineNumbers()
 	e.drawHeader()
-	// e.drawUnsaved()
 	e.stdscr.Erase()
 	e.selected = ""
 	lastY := -1
@@ -634,15 +540,11 @@ func (e *Editor) draw() {
 					e.stdscr.AttrOff(gc.A_REVERSE)
 				}
 			}
-			// e.stdscr.Print(token)
 			DisableColor(e.stdscr, t.color)
 		}
 		e.stdscr.Println()
 
 	}
-	//if e.terminalOpened {
-	//	e.stdscr.VLine(0, e.maxX-1, 0, e.maxY)
-	//}
 
 	e.stdscr.Move(e.y-e.printLinesIndex, accountedForTabs-e.printLineStartIndex)
 
@@ -654,9 +556,6 @@ func (e *Editor) draw() {
 	}
 
 	e.stdscr.Refresh()
-
-	// dt := time.Since(before)
-	// e.debugLog("draw time:", dt)
 }
 
 func (e *Editor) runCleanUps() {
@@ -666,10 +565,6 @@ func (e *Editor) runCleanUps() {
 }
 
 func (e *Editor) End() {
-	//err := e.cmdIn.Close()
-	//if err != nil {
-	//	log.Println(err)
-	//}
 	if e.terminalOpened {
 		e.resizeWindows() // TODO: figure out why
 	}
@@ -690,7 +585,6 @@ func (e *Editor) removeSelection() {
 		selectedXStart = utils.Min(e.selectedXStart, e.selectedXEnd)
 		selectedXEnd = utils.Max(e.selectedXStart, e.selectedXEnd)
 		e.remove(selectedYStart, selectedXEnd, selectedXEnd-selectedXStart)
-		// e.lines[selectedYStart] = e.lines[selectedYStart][:selectedXStart] + e.lines[selectedYStart][selectedXEnd:]
 		e.moveXto(selectedXStart)
 		return
 	}
@@ -699,8 +593,8 @@ func (e *Editor) removeSelection() {
 	e.remove(selectedYStart, len(e.lines[selectedYStart]), len(e.lines[selectedYStart])-selectedXStart)
 	e.insert(selectedYStart, selectedXStart, text)
 	e.deleteLines(selectedYStart+1, selectedYEnd-selectedYStart)
-	e.moveYto(selectedYStart) // e.y = selectedYStart
-	e.moveXto(selectedXStart) // e.x = selectedXStart
+	e.moveYto(selectedYStart)
+	e.moveXto(selectedXStart)
 }
 
 // Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
@@ -715,11 +609,11 @@ func (e *Editor) removeText(y, x, num int) string {
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
-	e.modified[e.path] = true
-
 	if num == 0 {
 		return
 	}
+
+	e.modified[e.path] = true
 
 	// TODO: will needs some fixing to work with nums larger than 1
 	if x == 0 {
@@ -735,8 +629,6 @@ func (e *Editor) remove(y, x, num int) {
 	}
 
 	text := e.removeText(y, x, num)
-
-	e.debugLog("this is the text:", text)
 
 	if text != "" {
 		ta := Action{
@@ -881,7 +773,6 @@ func (e *Editor) deleteLinesText(y, num int) (text string) {
 		e.lines = append(e.lines[:y], e.lines[utils.Min(y+num, len(e.lines)):]...)
 	}
 	return
-	// e.clampX()
 }
 func (e *Editor) deleteLines(y, num int) {
 	if len(e.lines) <= 0 {
@@ -939,13 +830,6 @@ func (e *Editor) switchFile(delta int) {
 	}
 }
 func (e *Editor) exitFile(path string) {
-	//openPathsToNames map[string]string   // paths to name
-	//openedFiles      []string            // List of paths
-	//modified         map[string]bool     // paths to bool
-	//current          int                 // current file user is on
-	//tempFilePaths    map[string]string   // paths to temp file paths
-	//tempFilePos      map[string]Location // where the user is in each opened file
-
 	delete(e.openPathsToNames, path)
 	delete(e.modified, path)
 	delete(e.tempFilePaths, path)
@@ -1007,7 +891,6 @@ func (e *Editor) Load(filePath string) error {
 
 	}
 	e.tempFilePos[e.path] = Location{col: e.x, line: e.y}
-	// filePath = strings.ToLower(filePath)
 	e.path = filePath
 
 	var lines []byte
@@ -1127,15 +1010,11 @@ func (e *Editor) moveYto(y int) {
 func (e *Editor) getTokenIndexByX(tokens []Token, x int) int {
 	index := -1
 	for i, token := range tokens {
-		//e.debugLog("X:", x, "token:", token.location.col, "tokenSize:", token.location.col+token.Length())
 		if token.location.col <= x && token.location.col+token.Length() >= x {
 			index = i
-			// e.debugLog("found")
 			break
 		}
 	}
-	//e.debugLog("returning", index)
-	//e.debugLog("--------------------")
 	return index
 }
 func filterSpacesAndTabs(tokens []Token) []Token {
@@ -1221,7 +1100,6 @@ func (e *Editor) ctrlMoveRight() {
 
 	if tonken.location.col+tonken.Length() == e.x && i != len(tonkens)-1 {
 		nextTonken := tonkens[i+1]
-		//e.debugLog("next: ", nextTonken.location.col)
 		e.moveX(nextTonken.location.col + nextTonken.Length() - e.x)
 	} else {
 		e.moveX(tonken.location.col + tonken.Length() - e.x)
@@ -1283,11 +1161,6 @@ func (e *Editor) Run() error {
 	for {
 		key := e.stdscr.GetChar()
 
-		//before := time.Now()
-
-		//before := time.Now()
-		//e.debugLog(key, gc.KeyString(key))
-
 		updateLengthIndex := true
 		resetSelected := true
 		currentLine := e.lines[e.y]
@@ -1345,8 +1218,6 @@ func (e *Editor) Run() error {
 
 			e.moveYto(e.selectedYEnd)
 			e.moveXto(e.selectedXEnd)
-			//e.x = e.selectedXEnd
-			//e.y = e.selectedYEnd
 			resetSelected = false
 		case 3: // CTRL + C
 			text := e.selected
@@ -1430,7 +1301,6 @@ func (e *Editor) Run() error {
 			}
 
 			e.exitFile(e.path)
-			//e.popupWindow.pop("This is a very long message that is obviously too long")
 		case 18: // CTRL + R
 			for {
 				str1 := e.miniWindow.whileRun(false, "replace(find)")
@@ -1473,7 +1343,6 @@ func (e *Editor) Run() error {
 				e.popupWindow.pop("Failed to save!")
 			} else {
 				e.drawHeader()
-				// e.popupWindow.pop("Saved!")
 			}
 		case 20: // CTRL + T
 			if !e.terminalOpened {
@@ -1483,7 +1352,6 @@ func (e *Editor) Run() error {
 			} else {
 				e.resizeWindows()
 			}
-			//e.resizeWindows()
 		case 26: // CTRL + Z
 			e.undoTransaction()
 		case 24: // CTRL + X
@@ -1509,8 +1377,6 @@ func (e *Editor) Run() error {
 			resetSelected = false
 			e.selectedYEnd = e.y
 			e.selectedXEnd = e.x
-
-			// log.Println(e.selectedYEnd, e.selectedYEnd)
 		case 337: // Shift+Up
 			e.moveY(-1)
 			updateLengthIndex = false
@@ -1539,7 +1405,6 @@ func (e *Editor) Run() error {
 		case gc.KEY_PAGEUP:
 			e.printLinesIndex = utils.Max(e.printLinesIndex-e.maxY, 0)
 			e.moveY(-e.maxY)
-			// e.Run()
 		case gc.KEY_DOWN:
 			e.moveY(1)
 			updateLengthIndex = false
@@ -1600,10 +1465,8 @@ func (e *Editor) Run() error {
 				e.removeSelection()
 			}
 
-			// e.lines[e.y] = e.lines[e.y][:e.x] + chr + e.lines[e.y][e.x:]
 			e.insert(e.y, e.x, chr)
 			e.moveX(1)
-			// e.x++
 		}
 
 		if updateLengthIndex {
@@ -1617,9 +1480,7 @@ func (e *Editor) Run() error {
 		}
 
 		e.y = utils.Min(utils.Max(len(e.lines)-1, 0), e.y)
-		//e.debugLog("run took:", time.Since(before))
 		e.draw()
-		//e.debugLog("Total time:", time.Since(before))
 		e.transactions.submit(beforeY, beforeX)
 	}
 }

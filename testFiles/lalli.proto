@@ -7,6 +7,6 @@ import "some/random/import.proto";
 message TestMessage {
 	bool thing = 1;
 	string anotherThing = 2;
-	
+
 	int32 someIntThing = 3;
 }
