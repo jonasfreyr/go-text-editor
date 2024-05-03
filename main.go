@@ -600,12 +600,10 @@ func (e *Editor) removeSelection() {
 // Removes num amount of characters starting from x on line y, if num is more than the characters then the line is removed
 // If you desire to remove multiple lines use deleteLines
 func (e *Editor) removeText(y, x, num int) string {
-	e.debugLog("before:", e.lines[y])
 	x -= num
 	text := e.lines[y][x : x+num]
 
 	e.lines[y] = e.lines[y][:x] + e.lines[y][x+num:]
-	e.debugLog("after:", e.lines[y])
 	return text
 }
 func (e *Editor) remove(y, x, num int) {
@@ -971,7 +969,6 @@ func (e *Editor) moveY(delta int) {
 	config := GetEditorConfig()
 
 	e.y = utils.Min(utils.Max(e.y+delta, 0), len(e.lines)-1)
-	e.debugLog(e.y, len(e.lines))
 	e.clampX()
 
 	if e.y-e.printLinesIndex > e.maxY-config.TabWidth {
@@ -1229,10 +1226,8 @@ func (e *Editor) Run() error {
 				panic(err)
 			}
 		case 4: // CTRL + D
-			e.debugLog("Before y, len", e.y, len(e.lines))
 			e.deleteLines(e.y, 1)
 			e.moveY(0)
-			e.debugLog("After y, len", e.y, len(e.lines))
 		case 6: // CTRL + F
 			for {
 				str := e.miniWindow.whileRun(false, "find")

@@ -56,6 +56,10 @@ func (w *FileMenuWindow) getFiles(currentPath string) ([]MenuItem, error) {
 	sort.Strings(directoryNames)
 	sort.Strings(fileNames)
 
+	if path, _ := filepath.Abs(currentPath); path != "/" {
+		directoryNames = append([]string{".."}, directoryNames...)
+	}
+
 	menuItems := make([]MenuItem, 0)
 	for _, name := range directoryNames {
 		menuItems = append(menuItems, MenuItem{label: name, value: filepath.Join(currentPath, name), color: config.FolderColor.Color})
@@ -164,6 +168,12 @@ func (w *FileMenuWindow) run() (string, error) {
 		title := currentPath
 		if searchString != "" {
 			title = searchString
+		} else if strings.HasPrefix(title, "..") {
+			title, err = filepath.Abs(title)
+			if err != nil {
+				title = currentPath
+				log.Println(err)
+			}
 		}
 
 		w.menuWindow.draw(title)
