@@ -164,6 +164,12 @@ func (w *FileMenuWindow) run() (string, error) {
 			w.menuWindow.setItems(menuItems)
 			updateItems = false
 		}
+		path, err := filepath.Abs(currentPath)
+		path2, err2 := filepath.Abs(".")
+
+		if path == path2 && (err == nil && err2 == nil) {
+			currentPath = "."
+		}
 
 		title := currentPath
 		if searchString != "" {
